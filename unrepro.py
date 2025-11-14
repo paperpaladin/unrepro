@@ -83,7 +83,7 @@ def variants():
     # content: a leaked path shifts every later offset in the file, which is a
     # much louder signal than a same-length substitution, and it also catches
     # builds that pad or truncate the path.
-    a["dirname"], b["dirname"] = "build-a", "build-b"
+    a["dirname"], b["dirname"] = "build-a", "b-second-build-dir-with-a-much-longer-name"
     return a, b
 
 
@@ -338,6 +338,7 @@ def cmd_check(args):
                 return 2
         rels = set(outs["A"]) | set(outs["B"])
         ctx = {}
+        ctx["paths"] = [(roots["A"], roots["B"])]
         files = compare(roots["A"], roots["B"], rels, ctx)
         diff = [f for f in files if f["status"] != "identical"]
         res = {"source": src,
