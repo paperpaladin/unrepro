@@ -70,6 +70,26 @@ FIXES = {
 
 # --------------------------------------------------------------- the variations
 
+def best_locale():
+    """A non-C locale whose collation differs from C, if the system has one.
+
+    This is the one variation that silently becomes a no-op on a minimal system:
+    with only C and POSIX installed there is nothing to vary, and the
+    locale-dependent-sort class of bug cannot be detected at all. Say so rather
+    than pretend.
+    """
+    try:
+        have = subprocess.run(["locale", "-a"], capture_output=True, text=True,
+                              timeout=20).stdout.split()
+    except (OSError, subprocess.SubprocessError):
+        have = []
+    low = {h.lower().replace("-", ""): h for h in have}
+    for want in ("en_us.utf8", "en_gb.utf8", "de_de.utf8", "c.utf8"):
+        if want in low:
+            return low[want]
+    return "C"
+
+
 def variants():
     """The two sets of knobs, one axis per line, build A beside build B.
 
@@ -86,6 +106,7 @@ def variants():
     a["dirname"], b["dirname"] = "build-a", "b-second-build-dir-with-a-much-longer-name"
     a["tz"], b["tz"] = "UTC", "Asia/Tokyo"
     a["epoch"], b["epoch"] = None, EPOCH_B
+    a["locale"], b["locale"] = "C", best_locale()
     return a, b
 
 
@@ -99,6 +120,8 @@ def build_env(v):
     }
     if "tz" in v:
         env["TZ"] = v["tz"]
+    if "locale" in v:
+        env["LC_ALL"] = env["LANG"] = v["locale"]
     if v.get("epoch") is not None:
         env["SOURCE_DATE_EPOCH"] = str(v["epoch"])
     return env
@@ -327,6 +350,9 @@ def cmd_check(args):
         return 2
     a, b = variants()
     notes = []
+    if b["locale"] == a["locale"]:
+        notes.append("locale variation is INERT: no non-C locale is installed, "
+                     "so locale-dependent sort bugs cannot be detected here")
     cmd = args.cmd.split() if args.cmd else ["make"]
     tmp = tempfile.mkdtemp(prefix="unrepro.")
     try:
@@ -344,6 +370,7 @@ def cmd_check(args):
         ctx = {}
         ctx["paths"] = [(roots["A"], roots["B"])]
         ctx["epoch_b"] = b.get("epoch")
+        ctx["locale_a"], ctx["locale_b"] = a.get("locale"), b.get("locale")
         files = compare(roots["A"], roots["B"], rels, ctx)
         diff = [f for f in files if f["status"] != "identical"]
         res = {"source": src,
