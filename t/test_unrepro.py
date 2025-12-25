@@ -113,6 +113,7 @@ truthy("build B uses a different directory name", a["dirname"] != b["dirname"])
 truthy("build B's directory name is a different LENGTH too",
        len(a["dirname"]) != len(b["dirname"]))
 truthy("build B varies the timezone", a["tz"] != b["tz"])
+truthy("build B varies the umask", a["umask"] != b["umask"])
 check("build A gets no SOURCE_DATE_EPOCH", "SOURCE_DATE_EPOCH" in unrepro.build_env(a),
       False)
 check("build B gets SOURCE_DATE_EPOCH", unrepro.build_env(b)["SOURCE_DATE_EPOCH"],
