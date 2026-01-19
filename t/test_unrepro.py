@@ -131,6 +131,41 @@ LOCALE_OK = b["locale"] != a["locale"]
 if not LOCALE_OK:
     print("note: only C locales installed; the ls-order case cannot trigger here")
 
+# ============================================= the oracle: planted nondeterminism
+
+# (case directory, output file, required cause, a substring of the evidence)
+PLANTED = [
+    # Detected, but not yet explained -- the timestamp diagnoser is the next
+    # commit. Asserting "unknown" here keeps the suite honest about what the
+    # tool can actually do at this point in history.
+    ("date-macro", "dm", "unknown", "no known mechanism"),
+]
+
+for case, out, cause, evidence in PLANTED:
+    if case == "ls-order" and not LOCALE_OK:
+        print("skip %s (no non-C locale available)" % case)
+        continue
+    rc, res, err = run(["check", os.path.join(CASES, case), "--json"])
+    if res is None:
+        failed += 1
+        print("FAIL %s produced no JSON\n       %s" % (case, err[:400]))
+        continue
+    # Direction 1: it must not be called clean.
+    check("%s: detected as not reproducible" % case, res["verdict"], "not-reproducible")
+    check("%s: exits nonzero" % case, rc, 1)
+    f = finding(res, out)
+    if f is None:
+        failed += 1
+        print("FAIL %s: no finding for %s (have %s)"
+              % (case, out, [x["path"] for x in res["files"]]))
+        continue
+    # Direction 2: the diagnosis must name the planted mechanism, not just any
+    # mechanism. This is the assertion that makes the tool worth having.
+    check("%s: diagnosed as %s" % (case, cause), f["cause"], cause)
+    truthy("%s: evidence mentions %r" % (case, evidence), evidence in alltext(f),
+           "detail was: " + alltext(f)[:300])
+    truthy("%s: reports at least one byte range" % case, len(f["ranges"]) >= 1)
+
 # ----------------------------------------------------------------- the control
 rc, res, err = run(["check", os.path.join(CASES, "control"), "--json"])
 if res is None:
