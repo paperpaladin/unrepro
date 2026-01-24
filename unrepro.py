@@ -280,6 +280,57 @@ def section_at(secs, off):
     return None
 
 
+# --------------------------------------------------------------- date sniffing
+
+DATE_RES = [
+    (re.compile(rb"[A-Z][a-z]{2} [ \d]\d \d{4}"), "C __DATE__ form 'Mon DD YYYY'"),
+    (re.compile(rb"\d{4}-[01]\d-[0-3]\d"), "ISO date"),
+    (re.compile(rb"[A-Z][a-z]{2} [A-Z][a-z]{2} +\d{1,2} "), "date(1) output 'Day Mon DD'"),
+    (re.compile(rb"\b[0-2]\d:[0-5]\d:[0-5]\d\b"), "clock time 'HH:MM:SS'"),
+]
+
+
+def text_dates(buf):
+    found = []
+    for rx, label in DATE_RES:
+        for m in rx.finditer(buf):
+            found.append((m.group(0).decode("latin-1"), label))
+    return found
+
+
+def epoch_nums(buf, lo, hi):
+    """Little-endian integers near a differing range that look like a date.
+
+    """
+    seen, out = set(), []
+    for p in range(max(0, lo - 7), min(len(buf), hi + 1)):
+        for fmt, n in (("<I", 4), ("<Q", 8)):
+            if p + n > len(buf):
+                continue
+            v, = struct.unpack_from(fmt, buf, p)
+            if PLAUSIBLE[0] <= v <= PLAUSIBLE[1] and v not in seen:
+                seen.add(v)
+                out.append((p, n, v))
+    return out
+
+
+def epoch_forms(e):
+    """Every spelling of one epoch that we have seen leak into a build output.
+
+    # shortcut: rendered in UTC only, which is what gcc does for
+    # SOURCE_DATE_EPOCH. A build that formats it in the local timezone instead
+    # would not match any of these and would fall back to the weaker "both sides
+    # parse as a date" wording. Upgrade: render under both varied TZ values,
+    # which needs the TZ pair threaded into ctx.
+    """
+    t = time.gmtime(e)
+    return [(time.strftime("%b %e %Y", t).encode(), "__DATE__ form"),
+            (time.strftime("%H:%M:%S", t).encode(), "__TIME__ form"),
+            (time.strftime("%Y-%m-%d", t).encode(), "ISO form"),
+            (str(e).encode(), "decimal seconds"),
+            (struct.pack("<I", e), "4-byte LE binary")]
+
+
 # ------------------------------------------------------------------- diagnosis
 
 def diagnose(rel, a, b, ctx):
@@ -307,6 +358,34 @@ def diagnose(rel, a, b, ctx):
     sec_lines = ["  section %-20s size A=%s B=%s"
                  % (n, sa.get(n, "absent"), sb.get(n, "absent"))
                  for n in sorted(set(sa) | set(sb)) if sa.get(n) != sb.get(n)]
+
+    # --- a timestamp
+    tlines = []
+    for lo, hi in rs[:8]:
+        wa, wb = window(a, lo, hi), window(b, lo, hi)
+        da, db = text_dates(wa), text_dates(wb)
+        if da and db:
+            tlines.append("  at 0x%x%s: A text %r (%s) / B text %r"
+                          % (lo, sec_note(secs_a, lo), da[0][0], da[0][1], db[0][0]))
+        ea, eb = epoch_nums(a, lo, hi), epoch_nums(b, lo, hi)
+        if ea and eb and ea[0][2] != eb[0][2]:
+            tlines.append("  at 0x%x%s: A %d-byte LE %d (%s) / B %d (%s)"
+                          % (ea[0][0], sec_note(secs_a, ea[0][0]), ea[0][1],
+                             ea[0][2], utc(ea[0][2]), eb[0][2], utc(eb[0][2])))
+    proof = []
+    eb_epoch = ctx.get("epoch_b")
+    if eb_epoch is not None:
+        for form, label in epoch_forms(eb_epoch):
+            if form in b and form not in a:
+                proof.append("  B contains the %s of SOURCE_DATE_EPOCH=%d: %r"
+                             % (label, eb_epoch, form))
+    if tlines or proof:
+        head = ["the differing bytes decode as a date:"] if tlines else []
+        tail = (["this is conclusive: that value came from the clock we handed "
+                 "build B, so the build embeds its own build time"] if proof else
+                ["both sides parse as plausible dates, so this is the clock, "
+                 "not the source"])
+        add("timestamp", head + tlines + proof + tail)
 
     # --- ELF section table, as a locator and as a cause of last resort
     if is_elf:
