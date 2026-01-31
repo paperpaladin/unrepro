@@ -108,6 +108,7 @@ NOCTX = {"paths": [], "hosts": [], "users": [], "epoch_b": None,
 f = unrepro.diagnose("z.bin", b"\x00\x01\xff\xee\x11", b"\x00\x01\xff\x77\x11", NOCTX)
 check("an unexplained byte is diagnosed as unknown", f["cause"], "unknown")
 truthy("and reports the offset", "0x3" in alltext(f))
+truthy("and shows a hex window", any("ff" in l for l in f["hexdump"]))
 
 f = unrepro.diagnose("e.txt", b"same", b"same", NOCTX)
 check("identical input yields no differing ranges", f["ranges"], [])
@@ -141,6 +142,7 @@ if not LOCALE_OK:
 # (case directory, output file, required cause, a substring of the evidence)
 PLANTED = [
     ("date-macro", "dm", "timestamp", "SOURCE_DATE_EPOCH=1234567890"),
+    ("date-cmd", "version.h", "timestamp", ":"),
 ]
 
 for case, out, cause, evidence in PLANTED:

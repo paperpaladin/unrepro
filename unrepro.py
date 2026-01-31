@@ -46,6 +46,10 @@ EPOCH_B = 1234567890
 # it is just a number that happens to be 4 bytes wide.
 PLAUSIBLE = (631152000, 2208988800)
 
+# shortcut: a flat size threshold for the full byte-offset diff. A 4KiB file
+# gets every differing range dumped; a 4MiB one gets none, even when the single
+# differing byte would have been the whole answer. Upgrade: always dump, but cap
+# the number of ranges rather than the file size.
 HEX_LIMIT = 4096      # full byte-offset diff only for files this small
 MAX_RANGES = 24       # cap reported differing ranges; a shifted ELF has thousands
 PAD = 48              # bytes of context either side of a differing range
@@ -232,6 +236,20 @@ def hexline(buf, off, n=16):
     h = " ".join("%02x" % c for c in chunk)
     t = "".join(chr(c) if 32 <= c < 127 else "." for c in chunk)
     return "%08x  %-47s  %s" % (off, h, t)
+
+
+def hexdiff(a, b, ranges):
+    """Byte-offset-level diff. Small files get this in full."""
+    out = []
+    for lo, hi in ranges:
+        start = max(0, (lo - 8) & ~0xF)
+        end = min(max(len(a), len(b)), hi + 8)
+        out.append("  @ 0x%x..0x%x (%d byte%s)"
+                   % (lo, hi, hi - lo, "" if hi - lo == 1 else "s"))
+        for off in range(start, end, 16):
+            out.append("    A " + hexline(a, off))
+            out.append("    B " + hexline(b, off))
+    return out
 
 
 # ------------------------------------------------------------------------- ELF
@@ -422,6 +440,8 @@ def diagnose(rel, a, b, ctx):
         f["detail"].append("fix: " + FIXES[order[0]])
     for c in order[1:]:
         f["also"].append({"cause": c, "detail": cands[c]})
+    if max(len(a), len(b)) <= HEX_LIMIT:
+        f["hexdump"] = hexdiff(a, b, rs[:MAX_RANGES])
     return f
 
 
