@@ -377,6 +377,37 @@ def diagnose(rel, a, b, ctx):
                  % (n, sa.get(n, "absent"), sb.get(n, "absent"))
                  for n in sorted(set(sa) | set(sb)) if sa.get(n) != sb.get(n)]
 
+    # --- a build path baked into the artifact
+    for pa, pb in ctx.get("paths", []):
+        ea, eb = pa.encode(), pb.encode()
+        hit_a, hit_b = a.find(ea), b.find(eb)
+        if hit_a >= 0 or hit_b >= 0:
+            lines = ["the build directory path is embedded in the output:"]
+            if hit_a >= 0:
+                lines.append("  A contains %r at offset 0x%x%s"
+                             % (pa, hit_a, sec_note(secs_a, hit_a)))
+            if hit_b >= 0:
+                lines.append("  B contains %r at offset 0x%x%s"
+                             % (pb, hit_b, sec_note(secs_b, hit_b)))
+            lines.append("the two builds differ only in where they ran, so this "
+                         "string is machine identity, not source")
+            add("build-path", lines)
+            break
+
+    # --- build host / user identity
+    for key, label in (("hosts", "hostname"), ("users", "user name")):
+        for va, vb in ctx.get(key, []):
+            if va == vb:
+                continue
+            ha_, hb_ = a.find(va.encode()), b.find(vb.encode())
+            if ha_ >= 0 or hb_ >= 0:
+                add("build-host",
+                    ["the build %s is embedded in the output:" % label] +
+                    (["  A contains %r at offset 0x%x%s" % (va, ha_, sec_note(secs_a, ha_))]
+                     if ha_ >= 0 else []) +
+                    (["  B contains %r at offset 0x%x%s" % (vb, hb_, sec_note(secs_b, hb_))]
+                     if hb_ >= 0 else []))
+
     # --- a timestamp
     tlines = []
     for lo, hi in rs[:8]:
