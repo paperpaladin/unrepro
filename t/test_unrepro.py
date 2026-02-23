@@ -103,6 +103,10 @@ check("elf_sections declines a non-ELF", unrepro.elf_sections(b"MZ not elf"), []
 NOCTX = {"paths": [], "hosts": [], "users": [], "epoch_b": None,
          "locale_a": "C", "locale_b": "en_US.UTF-8"}
 
+f = unrepro.diagnose("l.txt", b"Beta\nalpha\n", b"alpha\nBeta\n", NOCTX)
+check("a permutation is diagnosed as reorder", f["cause"], "reorder")
+truthy("and blames collation", "collation" in alltext(f))
+
 f = unrepro.diagnose("p.txt", b"dir=/build/aa\n", b"dir=/build/bb\n",
                      dict(NOCTX, paths=[("/build/aa", "/build/bb")]))
 check("an embedded build path is diagnosed as build-path", f["cause"], "build-path")
@@ -152,9 +156,7 @@ PLANTED = [
     ("date-macro", "dm", "timestamp", "SOURCE_DATE_EPOCH=1234567890"),
     ("file-macro", "fm", "build-path", "build-a"),
     ("date-cmd", "version.h", "timestamp", ":"),
-    # Mis-diagnosed: b"Beta" unpacks to a plausible epoch, so a text manifest
-    # reads as a clock bug. Pinned here, fixed in the next two commits.
-    ("ls-order", "manifest.txt", "timestamp", "decode as a date"),
+    ("ls-order", "manifest.txt", "reorder", "permutation"),
 ]
 
 for case, out, cause, evidence in PLANTED:
