@@ -306,6 +306,44 @@ def section_at(secs, off):
     return None
 
 
+# -------------------------------------------------------------------------- ar
+
+# shortcut: ar only. tar and cpio have the same shape of bug (member order,
+# mtime, uid/gid/uname/gname, mode, pax headers) and no diagnoser here, so a
+# .tar.gz gets its gzip wrapper explained and nothing about its contents.
+# Ceiling: the format most source releases actually ship in. Upgrade: a
+# tar_members() parsing the 512-byte ustar header, same shape as ar_members.
+
+AR_MAGIC = b"!<arch>\n"
+
+
+def ar_members(buf):
+    if buf[:8] != AR_MAGIC:
+        return None
+    out, i = [], 8
+    while i + 60 <= len(buf):
+        h = buf[i:i + 60]
+        if h[58:60] != b"`\n":
+            break
+        try:
+            size = int(h[48:58].decode("ascii").strip())
+        except ValueError:
+            break
+        # GNU ar terminates member names with "/"; strip it for readability but
+        # leave the special "/" and "//" members alone.
+        nm = h[0:16].decode("latin-1").rstrip()
+        if len(nm) > 1 and nm.endswith("/") and nm != "//":
+            nm = nm[:-1]
+        out.append(dict(name=nm,
+                        mtime=h[16:28].decode("latin-1").strip(),
+                        uid=h[28:34].decode("latin-1").strip(),
+                        gid=h[34:40].decode("latin-1").strip(),
+                        mode=h[40:48].decode("latin-1").strip(),
+                        size=size))
+        i += 60 + size + (size & 1)
+    return out
+
+
 # --------------------------------------------------------------- date sniffing
 
 DATE_RES = [
@@ -416,6 +454,45 @@ def diagnose(rel, a, b, ctx):
     # that on four real repos before this flag existed. Text matches survive,
     # because a string is still a string wherever it landed.
     shifted = len(a) != len(b) or bool(sec_lines)
+
+    # --- ar archive member table
+    ma, mb = ar_members(a), ar_members(b)
+    if ma is not None and mb is not None:
+        na, nb = [m["name"] for m in ma], [m["name"] for m in mb]
+        if na != nb:
+            kind = ("same members, different order" if sorted(na) == sorted(nb)
+                    else "different member sets")
+            add("ar-order", ["ar member order differs (%s):" % kind,
+                             "  A %s" % " ".join(na), "  B %s" % " ".join(nb)])
+        if sorted(na) == sorted(nb):
+            by_b = {m["name"]: m for m in mb}
+            lines, fields = [], set()
+            for m in ma:
+                o = by_b.get(m["name"])
+                if not o:
+                    continue
+                for k in ("mtime", "uid", "gid", "mode"):
+                    if m[k] != o[k]:
+                        fields.add(k)
+                        extra = ""
+                        if k == "mtime":
+                            try:
+                                extra = ("   (%s vs %s)"
+                                         % (utc(int(m[k] or 0)), utc(int(o[k] or 0))))
+                            except ValueError:
+                                pass
+                        lines.append("  member %-16s %-5s  A=%-12s B=%-12s%s"
+                                     % (m["name"], k, m[k] or '""', o[k] or '""', extra))
+            # shortcut: member payloads are compared as whole blobs, so a
+            # verdict is "libfoo.a" and never "libfoo.a(bar.o) .comment".
+            # Upgrade: recurse -- hand each member pair back to diagnose().
+            if fields:
+                add("ar-metadata",
+                    ["ar member header field(s) differ: %s"
+                     % ", ".join(sorted(fields))] + lines[:12] +
+                    ["member payloads are identical"
+                     if all(x["size"] == by_b[x["name"]]["size"] for x in ma)
+                     else "member sizes differ too"])
 
     # --- a build path baked into the artifact
     for pa, pb in ctx.get("paths", []):
