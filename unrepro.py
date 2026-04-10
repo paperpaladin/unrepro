@@ -344,6 +344,31 @@ def ar_members(buf):
     return out
 
 
+# ------------------------------------------------------------------------ gzip
+
+def gz_header(buf):
+    if len(buf) < 10 or buf[:2] != b"\x1f\x8b":
+        return None
+    flg = buf[3]
+    mtime, = struct.unpack_from("<I", buf, 4)
+    i = 10
+    try:
+        if flg & 4:
+            xlen, = struct.unpack_from("<H", buf, i)
+            i += 2 + xlen
+        name = None
+        if flg & 8:
+            e = buf.find(b"\0", i)
+            name, i = buf[i:e].decode("latin-1"), e + 1
+        if flg & 16:
+            i = buf.find(b"\0", i) + 1
+        if flg & 2:
+            i += 2
+    except struct.error:
+        return None
+    return dict(flg=flg, mtime=mtime, name=name, payload=i)
+
+
 # --------------------------------------------------------------- date sniffing
 
 DATE_RES = [
@@ -454,6 +479,20 @@ def diagnose(rel, a, b, ctx):
     # that on four real repos before this flag existed. Text matches survive,
     # because a string is still a string wherever it landed.
     shifted = len(a) != len(b) or bool(sec_lines)
+
+    # --- gzip header, before anything else: a .gz whose only difference is the
+    # 4-byte MTIME field is the single most common packaging bug there is.
+    ha, hb = gz_header(a), gz_header(b)
+    if ha and hb and ha["mtime"] != hb["mtime"]:
+        same = a[ha["payload"]:] == b[hb["payload"]:]
+        add("gzip-mtime", [
+            "gzip header MTIME (offset 0x04..0x07) differs:",
+            "  A %d  (%s)" % (ha["mtime"], utc(ha["mtime"]) if ha["mtime"] else "zero / not set"),
+            "  B %d  (%s)" % (hb["mtime"], utc(hb["mtime"]) if hb["mtime"] else "zero / not set"),
+            "deflate payload after the header is %s"
+            % ("byte-identical, so the header is the ONLY difference" if same
+               else "also different, so there is a second cause below"),
+        ])
 
     # --- ar archive member table
     ma, mb = ar_members(a), ar_members(b)
