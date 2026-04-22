@@ -251,5 +251,36 @@ with tempfile.TemporaryDirectory() as tmp:
           res["verdict"] if res else err, "inconclusive")
     check("and exits nonzero", rc, 2)
 
+# ================================================ against a real sibling build
+
+# Informational, not pass/fail on the verdict: whether a neighbouring repo is
+# reproducible is not something this suite controls, and pinning it would make
+# the suite fail for the wrong reason the moment someone fixed their CFLAGS.
+# What IS asserted is that unrepro survives a real build and returns a verdict.
+REAL = None
+for cand in ("cc", "walkv", "rx", "trace"):
+    p = os.path.join(os.path.dirname(ROOT), cand)
+    if os.path.isfile(os.path.join(p, "Makefile")):
+        REAL = p
+        break
+if REAL and not os.environ.get("UNREPRO_SKIP_REAL"):
+    # -B because these trees carry their built binaries, which would otherwise
+    # make `make` a no-op -- exactly the condition the inconclusive guard exists
+    # to refuse.
+    rc, res, err = run(["check", REAL, "--cmd", "make -B", "--json"])
+    truthy("real build (%s): returns a verdict" % os.path.basename(REAL),
+           res is not None and res["verdict"] in
+           ("reproducible", "not-reproducible", "inconclusive"),
+           (err or "")[:300])
+    if res:
+        print("     real finding: %s -> %s" % (os.path.basename(REAL), res["verdict"]))
+        for f in res["files"]:
+            if f["status"] != "identical":
+                print("       %s: %s" % (f["path"], f["cause"]))
+                for line in f["detail"][:4]:
+                    print("         " + line)
+else:
+    print("skip real sibling build (none found, or UNREPRO_SKIP_REAL set)")
+
 print("\n%d passed, %d failed" % (passed, failed))
 sys.exit(1 if failed else 0)
