@@ -82,6 +82,18 @@ FIXES = {
 
 # --------------------------------------------------------------- the variations
 
+# Each axis is a named group of knobs. --no-vary NAME copies A's value into B,
+# which is how you bisect "which variation triggers this".
+AXES = {
+    "path": ["dirname"],
+    "time": ["tz", "epoch"],
+    "locale": ["locale"],
+    "umask": ["umask"],
+    "host": ["host", "user"],
+    "jobs": ["jobs"],
+}
+
+
 def best_locale():
     """A non-C locale whose collation differs from C, if the system has one.
 
@@ -102,7 +114,7 @@ def best_locale():
     return "C"
 
 
-def variants():
+def variants(disabled=()):
     """The two sets of knobs, one axis per line, build A beside build B.
 
     Written this way so that each axis is one readable line and adding or
@@ -123,6 +135,23 @@ def variants():
     a["host"], b["host"] = "builder-one", "buildd-42.example.org"
     a["user"], b["user"] = "alice", "bob"
     a["jobs"], b["jobs"] = 1, 4
+    for axis in disabled:
+        if axis not in AXES:
+            raise SystemExit("unrepro: unknown variation axis %r (have: %s)"
+                             % (axis, ", ".join(sorted(AXES))))
+        for k in AXES[axis]:
+            b[k] = a[k]
+    if "time" in disabled:
+        # Holding the clock constant has to mean PINNING it, not letting both
+        # builds read a free-running wall clock. Two gcc runs 100ms apart
+        # disagree about __TIME__ roughly one time in ten, so "--no-vary time"
+        # implemented as "neither build gets SOURCE_DATE_EPOCH" produces a
+        # bisection that is clean most of the time -- and a flaky bisection is
+        # worse than none, because it teaches you to rerun until you like the
+        # answer. SOURCE_DATE_EPOCH is the only clock we can pin without
+        # libfaketime, which is not in the standard library.
+        a["epoch"] = b["epoch"] = EPOCH_B
+        a["tz"] = b["tz"] = "UTC"
     return a, b
 
 
@@ -733,7 +762,8 @@ def cmd_check(args):
     if not os.path.isdir(src):
         print("unrepro: no such directory: %s" % src, file=sys.stderr)
         return 2
-    a, b = variants()
+    disabled = [x for x in (args.no_vary or "").split(",") if x]
+    a, b = variants(disabled)
     notes = []
     if b["locale"] == a["locale"]:
         notes.append("locale variation is INERT: no non-C locale is installed, "
@@ -743,6 +773,13 @@ def cmd_check(args):
     try:
         roots, logs = {}, {}
         outs = {}
+        # --no-vary path means literally the same directory, which is only
+        # possible because the builds are sequential: build A, move its tree
+        # aside, then build B at the identical path. Faking it with two
+        # same-length names would leave a one-character difference that still
+        # leaks, so the bisection would not come back clean and the flag would
+        # be useless for the one job it has.
+        same_dir = a["dirname"] == b["dirname"]
         for v in (a, b):
             root = os.path.join(tmp, v["dirname"])
             rc, log, o = run_build(src, root, v, cmd, args.timeout)
@@ -751,9 +788,15 @@ def cmd_check(args):
                 print("unrepro: build %s failed (exit %d) in %s\n%s"
                       % (v["name"], rc, root, log), file=sys.stderr)
                 return 2
+            if v is a and same_dir:
+                roots["A"] = os.path.join(tmp, "a-saved")
+                shutil.move(root, roots["A"])
         rels = set(outs["A"]) | set(outs["B"])
+        # With the path held constant there is no pair of path strings to look
+        # for, and pretending otherwise would make every output "contain the
+        # build path" trivially.
         ctx = {}
-        ctx["paths"] = [(roots["A"], roots["B"])]
+        ctx["paths"] = [] if same_dir else [(roots["A"], roots["B"])]
         ctx["hosts"] = [(a["host"], b["host"])] if "host" in a else []
         ctx["users"] = [(a["user"], b["user"])] if "user" in a else []
         ctx["epoch_b"] = b.get("epoch")
@@ -788,6 +831,7 @@ def cmd_check(args):
                            "desc": describe(v, os.path.join(tmp, v["dirname"]))}
                           for v in (a, b)],
                "notes": notes,
+               "varied": sorted(set(AXES) - set(disabled)),
                "files": files,
                "verdict": "not-reproducible" if diff else "reproducible"}
         if args.json:
@@ -812,6 +856,8 @@ def main(argv=None):
     c = sub.add_parser("check", help="build DIR twice with varied conditions")
     c.add_argument("dir")
     c.add_argument("--cmd", help="build command (default: make)")
+    c.add_argument("--no-vary", help="comma-separated axes to hold constant: %s"
+                                     % ",".join(sorted(AXES)))
     c.add_argument("--timeout", type=int, default=600)
     c.add_argument("--keep", action="store_true", help="keep the build trees")
     c.add_argument("--json", action="store_true")
