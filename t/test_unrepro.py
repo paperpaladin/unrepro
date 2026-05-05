@@ -279,6 +279,20 @@ with tempfile.TemporaryDirectory() as tmp:
           res["verdict"] if res else err, "inconclusive")
     check("and exits nonzero", rc, 2)
 
+# ---------------------------------------------------------- the diff subcommand
+with tempfile.TemporaryDirectory() as tmp:
+    pa, pb = os.path.join(tmp, "a.gz"), os.path.join(tmp, "b.gz")
+    open(pa, "wb").write(GZ_A)
+    open(pb, "wb").write(GZ_B)
+    rc, res, err = run(["diff", pa, pb, "--json"])
+    check("diff on two files exits 1", rc, 1)
+    check("diff diagnoses the gzip header",
+          res["files"][0]["cause"] if res else err, "gzip-mtime")
+    rc, res, err = run(["diff", pa, pa, "--json"])
+    check("diff on identical files exits 0", rc, 0)
+    check("diff on identical files says reproducible",
+          res["verdict"] if res else err, "reproducible")
+
 # ================================================ against a real sibling build
 
 # Informational, not pass/fail on the verdict: whether a neighbouring repo is
