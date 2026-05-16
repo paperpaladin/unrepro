@@ -22,6 +22,7 @@ to gcc/ar/gzip and takes a few seconds.
 """
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -269,6 +270,61 @@ else:
     for want in ("ctl", "sorted.txt", "libctl.a", "data.gz"):
         truthy("control: actually produced %s" % want, want in got,
                "produced %s" % got)
+
+# ------------------------- a tree that already holds its products is judgeable
+# The bug this guards against was found in the wild, on a sibling repo whose
+# binary happened to be sitting in the working directory. A perfectly
+# reproducible build rewrites its products to the bytes that were already
+# there, so hash-only output detection sees nothing change -- and the tool
+# answered "inconclusive, no outputs observed" on the cleanest result it can
+# ever be handed, while the compile line sat in the log it printed.
+with tempfile.TemporaryDirectory() as tmp:
+    pre = os.path.join(tmp, "prebuilt")
+    shutil.copytree(os.path.join(CASES, "control"), pre)
+    subprocess.run(["make", "-C", pre], capture_output=True, timeout=600)
+    truthy("prebuilt: the fixture really is prebuilt",
+           os.path.exists(os.path.join(pre, "ctl")))
+
+    rc, res, err = run(["check", pre, "--cmd", "make -B", "--json"])
+    if res is None:
+        failed += 1
+        print("FAIL prebuilt produced no JSON\n       %s" % err[:400])
+    else:
+        check("prebuilt: a forced rebuild gets a verdict",
+              res["verdict"], "reproducible")
+        check("prebuilt: exits zero", rc, 0)
+        # Not just "a verdict": the products themselves have to be in it, or
+        # the verdict is about some incidental file and proves nothing.
+        got = sorted(f["path"] for f in res["files"])
+        for want in ("ctl", "libctl.a", "data.gz"):
+            truthy("prebuilt: compared %s" % want, want in got,
+                   "compared %s" % got)
+
+    # The guard against a false REPRODUCIBLE has to survive the fix. A build
+    # that genuinely writes nothing is still inconclusive, and the distinction
+    # between the two is the whole point of this pair.
+    rc, res, err = run(["check", pre, "--json"])
+    check("prebuilt: an unforced no-op is still inconclusive",
+          res["verdict"] if res else err, "inconclusive")
+    check("prebuilt: and still exits 2", rc, 2)
+
+# A rule that rewrites its output and then puts the timestamp back defeats
+# mtime. ctime does not care, and no unprivileged caller can set it.
+with tempfile.TemporaryDirectory() as tmp:
+    with open(os.path.join(tmp, "src.txt"), "w") as fh:
+        fh.write("payload\n")
+    with open(os.path.join(tmp, "Makefile"), "w") as fh:
+        fh.write("all:\n"
+                 "\tcp -p src.txt out.txt\n"
+                 "\ttouch -r src.txt out.txt\n")
+    # Run it once so out.txt exists with src.txt's mtime already. The build
+    # under test then rewrites it to the same bytes at the same mtime, which
+    # leaves ctime as the only thing that moved.
+    subprocess.run(["make", "-C", tmp], capture_output=True, timeout=120)
+    rc, res, err = run(["check", tmp, "--cmd", "make -B", "--json"])
+    truthy("mtime-restoring rule: output still compared",
+           res is not None and "out.txt" in [f["path"] for f in res["files"]],
+           "got %s" % (res["files"] if res else err[:200]))
 
 # ------------------------------------- the invariant: never clean on no evidence
 with tempfile.TemporaryDirectory() as tmp:

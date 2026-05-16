@@ -196,6 +196,20 @@ def describe(v, root):
 # ------------------------------------------------------------------- the builds
 
 def snapshot(root):
+    """Content hash, mtime and ctime for every file under root.
+
+    The timestamps are the half that matters for deciding what an output is. A
+    perfectly reproducible build rewrites its products to the same bytes they
+    already had, so comparing hashes alone cannot tell that apart from a build
+    that did nothing -- and the tool then refuses to compare the very outputs
+    it was asked about. Rewriting a file moves its mtime whether or not the
+    bytes changed, which is the distinction needed.
+
+    ctime is here because mtime can be put back: a tool that rewrites a file
+    and then calls utimensat to restore the timestamp is invisible to mtime
+    and not to ctime, which no unprivileged caller can set at all. It also
+    moves on a chmod, so a build that only changes a mode still gets compared.
+    """
     out = {}
     for d, dirs, files in os.walk(root):
         dirs[:] = [x for x in dirs if x != ".git"]
@@ -204,9 +218,11 @@ def snapshot(root):
             rel = os.path.relpath(p, root)
             try:
                 with open(p, "rb") as fh:
-                    out[rel] = hashlib.sha256(fh.read()).hexdigest()
+                    h = hashlib.sha256(fh.read()).hexdigest()
+                st = os.stat(p)
+                out[rel] = (h, st.st_mtime_ns, st.st_ctime_ns)
             except OSError:
-                out[rel] = "unreadable"
+                out[rel] = ("unreadable", 0, 0)
     return out
 
 
@@ -224,13 +240,16 @@ def run_build(src, dest, v, cmd, timeout):
                        preexec_fn=((lambda: os.umask(v["umask"]))
                                    if "umask" in v else None))
     after = snapshot(dest)
-    # shortcut: an output is "a file inside the tree whose content changed".
-    # That misses a build writing outside its own tree, and counts intermediates
-    # like .o as outputs -- which turns out to help (in t/cases/ar-stamp the
-    # clean .o files are what prove the archive headers are the only problem)
-    # but was an accident. Upgrade: honour an explicit output list, or diff the
+    # shortcut: an output is "a file inside the tree the build rewrote",
+    # judged by content hash, mtime or ctime. That misses a build writing
+    # outside its own tree, and counts intermediates like .o as outputs --
+    # which turns out to help (in t/cases/ar-stamp the clean .o files are what
+    # prove the archive headers are the only problem) but was an accident.
+    # It also assumes the filesystem has timestamps finer than the build is
+    # fast: on one with whole-second mtime and ctime, a rewrite inside the same
+    # second is invisible. Upgrade: honour an explicit output list, or diff the
     # install tree from a DESTDIR staged install.
-    outputs = sorted(r for r, h in after.items() if before.get(r) != h)
+    outputs = sorted(r for r, s in after.items() if before.get(r) != s)
     return p.returncode, p.stdout.decode("utf-8", "replace"), outputs
 
 
@@ -817,12 +836,15 @@ def cmd_check(args):
         # the exact false negative the tool exists to avoid, and the first real
         # repo it was pointed at hit it.
         if not rels:
-            msg = ("unrepro: the build produced no new or changed files, so "
-                   "there is nothing to compare.\n"
-                   "  Most likely the tree already contains its build products "
-                   "and make had nothing to do.\n"
-                   "  Retry with --cmd 'make -B', or point it at a clean "
-                   "checkout.\n"
+            msg = ("unrepro: the build rewrote no files, so there is nothing "
+                   "to compare.\n"
+                   "  An output is any file the build rewrote, including one it "
+                   "rewrote to the bytes\n"
+                   "  already there, so this is not the "
+                   "products-already-in-the-tree case: the\n"
+                   "  build genuinely had nothing to do.\n"
+                   "  Retry with --cmd 'make -B' to force it, or point it at a "
+                   "clean checkout.\n"
                    "  Build A said:\n%s"
                    % "".join("    " + l + "\n" for l in
                              logs["A"].splitlines()[:10] or ["(no output)"]))

@@ -189,6 +189,17 @@ already contain their built binaries, so `make` was a no-op, nothing was compare
 and "0 differ" was being read as success. Zero observed outputs is now
 `inconclusive` and exit 2, never `reproducible`, and it says what to do about it.
 
+That guard then started firing on the opposite case, which took longer to spot
+because the output looks the same. A *perfectly* reproducible build rewrites its
+products to the bytes already sitting in the tree, so "has anything changed"
+answers no and the tool declined to compare the outputs it had just rebuilt --
+with the compile line printed in the log right underneath. An output is now any
+file the build **rewrote**, judged by content hash, mtime or ctime, so a forced
+rebuild over a prebuilt tree gets a real verdict and a build that genuinely does
+nothing is still `inconclusive`. ctime is in there because mtime can be put back:
+a rule that rewrites its output and then restores the timestamp is invisible to
+mtime and not to ctime, which no unprivileged caller can set.
+
 With `--cmd 'make -B'`, the honest answer, for all four:
 
 ```
@@ -265,7 +276,8 @@ thirty lines of `struct` and does not depend on another program's output format.
 
 `check` copies the source tree twice (skipping `.git`), snapshots each copy,
 builds with a scrubbed environment plus one variant's knobs, re-snapshots, and
-treats every new or changed file as an output. `umask` is set in the child between
+treats every file the build rewrote as an output -- content hash, mtime or ctime,
+because the first alone cannot see a reproducible rebuild happen. `umask` is set in the child between
 fork and exec via `preexec_fn`, the only stdlib hook for it. `--no-vary path`
 moves build A's tree aside and builds B at the identical path, because faking it
 with two same-length names would leave a one-character difference that still
@@ -296,6 +308,9 @@ ok   ar-stamp: diagnosed as ar-metadata
 ok   gzip-mtime: diagnosed as gzip-mtime
 ok   control: reported clean
 ok   control: actually produced libctl.a
+ok   prebuilt: a forced rebuild gets a verdict
+ok   prebuilt: an unforced no-op is still inconclusive
+ok   mtime-restoring rule: output still compared
 ok   a build that produces nothing is inconclusive, not reproducible
 ok   date-macro goes clean with --no-vary time
 ok   file-macro goes clean with --no-vary path
@@ -304,10 +319,11 @@ ok   real build (cc): returns a verdict
      real finding: cc -> not-reproducible
        cc: build-path
 
-90 passed, 0 failed
+99 passed, 0 failed
 ```
 
-Fourteen real builds for the planted cases plus one build of a neighbouring repo,
+Fourteen real builds for the planted cases, three more for the
+prebuilt-tree and mtime-restoring checks, plus one build of a neighbouring repo,
 in about two seconds. There is no way to make that instant: a reproducibility
 checker can only be tested by building things. `UNREPRO_SKIP_REAL=1` skips the
 sibling build.
