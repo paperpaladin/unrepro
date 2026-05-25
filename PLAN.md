@@ -149,6 +149,17 @@ than listed one per line; `git log --oneline` has the detail.
            no-op case is still inconclusive -- that pair is the whole point.
  -- the variations that are still missing
 
+- [x] 01 copy the source tree with symlinks intact
+      why: found by pointing `check` at every sibling in turn. `tarx` was the
+           one repo that produced no verdict at all -- an unhandled
+           shutil.Error traceback, because copytree follows symlinks by
+           default and tarx's test tree deliberately holds a dangling link,
+           an over-long one, and a loop 42 levels deep. Refusing to follow a
+           hostile symlink is the entire point of tarx, so the one repo most
+           likely to contain such a tree was the one this tool could not
+           check, and hard rule 4 was unverifiable for it. Copying links as
+           links is also the more faithful copy of a build input.
+
 - [ ] 04 shuffled `readdir` order via an `LD_PRELOAD` shim wrapping
       `readdir`/`readdir64`, buffering each `DIR*`'s entries and returning them
       reversed

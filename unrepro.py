@@ -229,7 +229,17 @@ def snapshot(root):
 def run_build(src, dest, v, cmd, timeout):
     # .git is not an input to the build and can be enormous; copying it would
     # dominate the runtime and add nothing.
-    shutil.copytree(src, dest, ignore=shutil.ignore_patterns(".git"))
+    #
+    # symlinks=True recreates links as links. The default follows them and
+    # copies the target, which means a dangling link raises, a link to a
+    # directory gets silently duplicated, and a link that forms a loop raises
+    # ELOOP -- and shutil.Error reports all of it as an unhandled traceback.
+    # That made `check` unusable on tarx, whose test tree deliberately holds a
+    # dangling symlink, an over-long one, and a loop of 42 levels, because
+    # refusing to follow a hostile symlink is the whole thing tarx is for.
+    # Copying links as links is also the more faithful copy of a build input.
+    shutil.copytree(src, dest, symlinks=True,
+                    ignore=shutil.ignore_patterns(".git"))
     before = snapshot(dest)
     argv = list(cmd) + (["-j%d" % v["jobs"]] if "jobs" in v else [])
     # umask has to be set in the child, after fork and before exec. preexec_fn

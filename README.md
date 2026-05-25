@@ -274,7 +274,10 @@ own tools (`make`, `gcc`, `ar`, `gzip`) run inside the temporary trees; `readelf
 is deliberately *not* used, because parsing the ELF section table directly is
 thirty lines of `struct` and does not depend on another program's output format.
 
-`check` copies the source tree twice (skipping `.git`), snapshots each copy,
+`check` copies the source tree twice (skipping `.git`, keeping symlinks as
+symlinks -- following them made the one sibling whose test tree deliberately
+contains a dangling link and a 42-level loop the one repo that could not be
+checked), snapshots each copy,
 builds with a scrubbed environment plus one variant's knobs, re-snapshots, and
 treats every file the build rewrote as an output -- content hash, mtime or ctime,
 because the first alone cannot see a reproducible rebuild happen. `umask` is set in the child between
@@ -319,11 +322,11 @@ ok   real build (cc): returns a verdict
      real finding: cc -> not-reproducible
        cc: build-path
 
-99 passed, 0 failed
+101 passed, 0 failed
 ```
 
-Fourteen real builds for the planted cases, three more for the
-prebuilt-tree and mtime-restoring checks, plus one build of a neighbouring repo,
+Fourteen real builds for the planted cases, four more for the prebuilt-tree,
+mtime-restoring and hostile-symlink checks, plus one build of a neighbouring repo,
 in about two seconds. There is no way to make that instant: a reproducibility
 checker can only be tested by building things. `UNREPRO_SKIP_REAL=1` skips the
 sibling build.
