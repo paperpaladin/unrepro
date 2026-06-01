@@ -187,6 +187,37 @@ check("build B gets SOURCE_DATE_EPOCH", unrepro.build_env(b)["SOURCE_DATE_EPOCH"
 check("--no-vary path holds the directory constant",
       unrepro.variants(["path"])[1]["dirname"], a["dirname"])
 LOCALE_OK = b["locale"] != a["locale"]
+
+# best_locale() must pick a locale that COLLATES differently from C, not one
+# that is merely spelled differently. Its candidate list ends in "c.utf8",
+# which is a non-C locale by name and sorts byte-wise exactly like C -- so on
+# a system carrying only C, POSIX and C.UTF-8 it used to return C.UTF-8, the
+# ls-order case would run, both builds would sort identically, and ls-order
+# would be reported as a FALSE POSITIVE: unrepro accusing a reproducible
+# build because its own variation did nothing.
+check("the C locale is not accepted as a collation variant",
+      unrepro.collates_unlike_c("C"), False)
+if any(h.lower().replace("-", "") == "c.utf8"
+       for h in subprocess.run(["locale", "-a"], capture_output=True,
+                               text=True).stdout.split()):
+    check("...and neither is C.UTF-8, which collates byte-wise like C",
+          unrepro.collates_unlike_c("C.utf8"), False)
+    truthy("...so best_locale() does not return it",
+           unrepro.best_locale().lower().replace("-", "") != "c.utf8")
+else:
+    print("note: no C.UTF-8 on this system, so that half cannot be checked")
+truthy("the locale best_locale() picked really does collate differently",
+       unrepro.best_locale() == "C"
+       or unrepro.collates_unlike_c(unrepro.best_locale()))
+# Recorded honestly: on a machine that HAS en_US.UTF-8, reverting
+# best_locale() to compare names instead of collation is an EQUIVALENT
+# mutant -- en_US.UTF-8 is tried first and does collate differently, so
+# c.utf8 is never reached and the selection is unchanged. The bug only
+# manifests where C.UTF-8 is the only non-C locale, which is Debian slim and
+# many container bases. What the three checks above DO discriminate is the
+# collation test itself: making collates_unlike_c always return True turns
+# two of them red.
+
 if not LOCALE_OK:
     print("note: only C locales installed; the ls-order case cannot trigger here")
 
