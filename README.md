@@ -16,15 +16,20 @@ unrepro: /home/x/projects/unrepro/t/cases/ar-stamp
   b.o                          ok
   libstamp.a                   DIFFERS   ar-metadata
       ar member header field(s) differ: mode, mtime
-        member a.o              mtime  A=1791268131   B=1234567890     (2026-10-06T06:28:51Z vs 2009-02-13T23:31:30Z)
+        member a.o              mtime  A=1000000000   B=1234567890     (2001-09-09T01:46:40Z vs 2009-02-13T23:31:30Z)
         member a.o              mode   A=100644       B=100600
-        member b.o              mtime  A=1791268131   B=1234567890     (2026-10-06T06:28:51Z vs 2009-02-13T23:31:30Z)
+        member b.o              mtime  A=1000000000   B=1234567890     (2001-09-09T01:46:40Z vs 2009-02-13T23:31:30Z)
         member b.o              mode   A=100644       B=100600
       member payloads are identical
       fix: ar D (deterministic: mtime/uid/gid zeroed, mode normalised)
 
 VERDICT: NOT REPRODUCIBLE -- 1 of 3 output(s) differ: ar-metadata
 ```
+
+(Both `A` mtimes used to be a wall-clock value, which is why they read
+`1791268131` here and something else on your machine. They are fixed numbers
+now, and the reason is a flake worth reading about -- see *The suite was
+non-deterministic* below.)
 
 (That line read `1 of 1` until an audit noticed it contradicts the
 `3 output file(s) compared, 1 differ` eight lines above it in the same
@@ -336,6 +341,43 @@ mtime-restoring and hostile-symlink checks, plus one build of a neighbouring rep
 in about two seconds. There is no way to make that instant: a reproducibility
 checker can only be tested by building things. `UNREPRO_SKIP_REAL=1` skips the
 sibling build.
+
+## The suite was non-deterministic, and the cause is the thing this repo warns about
+
+Caught on the thirteenth consecutive run of `make test`:
+
+```
+FAIL ar-stamp goes clean with --no-vary time,umask
+```
+
+`ar rcsU` stamps the **symbol-index member** with the current time, not with
+anything derived from the inputs. Verified by building two archives from one
+unchanged object file a second apart: byte 34 differs, `5` against `7`,
+inside the armap's timestamp. So the `ar-stamp` case was irreproducible on
+the wall clock alone, and the bisection assertion that it goes clean once
+`time` and `umask` are held still could only pass when both builds landed in
+the same second. About one run in thirteen did not.
+
+`t/cases/date-macro/Makefile`, in the same directory, says it first:
+*"relying on the wall clock would only catch it when a second happens to
+tick between the builds, which is exactly the flakiness that lets this class
+of bug survive in real projects."* The same trap, in a sibling case, reached
+from the other direction -- a false **positive** rather than a missed
+negative, in a tool whose whole job is telling people their build is not
+reproducible.
+
+`ar rcSU` suppresses the symbol index, so the only variation left is the
+member headers, which is what the case is about. The member mtimes now come
+from `SOURCE_DATE_EPOCH` rather than from whenever the compiler ran, so the
+`time` axis controls them. 30 consecutive clean runs.
+
+One detail from fixing it, because it cost a second attempt: the fallback
+`${SOURCE_DATE_EPOCH:-...}` must not be `1234567890`. Build A is given no
+`SOURCE_DATE_EPOCH` and build B is given `EPOCH_B = 1234567890`, so a
+fallback of that value made both builds agree and the **mtime** difference
+disappeared, leaving only `mode` from the umask axis. The case stayed
+irreproducible, so nothing failed -- it just quietly stopped demonstrating
+the field it is named after.
 
 ## License
 
