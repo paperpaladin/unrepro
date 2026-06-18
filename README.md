@@ -333,7 +333,7 @@ ok   real build (cc): returns a verdict
      real finding: cc -> not-reproducible
        cc: build-path
 
-101 passed, 0 failed
+105 passed, 0 failed
 ```
 
 Fourteen real builds for the planted cases, four more for the prebuilt-tree,
