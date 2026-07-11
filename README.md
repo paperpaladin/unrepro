@@ -26,9 +26,10 @@ unrepro: /home/x/projects/unrepro/t/cases/ar-stamp
 VERDICT: NOT REPRODUCIBLE -- 1 of 3 output(s) differ: ar-metadata
 ```
 
-(Both `A` mtimes used to be a wall-clock value, which is why they read
-`1791268131` here and something else on your machine. They are fixed numbers
-now, and the reason is a flake worth reading about -- see *The suite was
+(Both `A` mtimes used to be a wall-clock value, which is why this paragraph
+used to quote `1791268131` while the transcript above read `1000000000`. They
+come from `SOURCE_DATE_EPOCH` now, so the numbers above are the numbers you
+will get; the reason is a flake worth reading about -- see *The suite was
 non-deterministic* below.)
 
 (That line read `1 of 1` until an audit noticed it contradicts the
@@ -39,8 +40,8 @@ hand, which makes a transcript evidence for nothing.)
 
 The `.o` files are byte-identical and the archive members are byte-identical; the
 only thing wrong is the 60-byte header in front of each one. "libstamp.a differs"
-would have told you nothing. `member a.o mtime A=1791268131 B=1234567890` tells
-you to add `D`.
+would have told you nothing. `member a.o mtime A=1000000000 B=1234567890`
+tells you to add `D`.
 
 ## The variations
 
@@ -105,7 +106,7 @@ the difference is. Files up to 4 KiB get a full byte-offset diff:
 ```
   data.gz                      DIFFERS   gzip-mtime
       gzip header MTIME (offset 0x04..0x07) differs:
-        A 1791268131  (2026-10-06T06:28:51Z)
+        A 1791268131  (2026-10-06T06:28:51Z)   <- wall clock; yours will differ
         B 1234567890  (2009-02-13T23:31:30Z)
       deflate payload after the header is byte-identical, so the header is the ONLY difference
       fix: gzip -n (writes MTIME=0 into the header)
