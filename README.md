@@ -29,13 +29,13 @@ VERDICT: NOT REPRODUCIBLE -- 1 of 3 output(s) differ: ar-metadata
 (Both `A` mtimes used to be a wall-clock value, which is why this paragraph
 used to quote `1791268131` while the transcript above read `1000000000`. They
 come from `SOURCE_DATE_EPOCH` now, so the numbers above are the numbers you
-will get; the reason is a flake worth reading about -- see *The suite was
+will get. The reason is a flake worth reading about, see *The suite was
 non-deterministic* below.)
 
 (That line read `1 of 1` until an audit noticed it contradicts the
 `3 output file(s) compared, 1 differ` eight lines above it in the same
 block. `unrepro.py` prints `len(diff)` of `len(res["files"])`, so the two
-numbers cannot both come from one run -- the sample had been edited by
+numbers cannot both come from one run, the sample had been edited by
 hand, which makes a transcript evidence for nothing.)
 
 The `.o` files are byte-identical and the archive members are byte-identical; the
@@ -47,7 +47,7 @@ tells you to add `D`.
 
 Two back-to-back builds in the same directory, at the same instant, in the same
 environment will usually match even when the build is hopelessly unreproducible.
-**A clean result from two identical builds proves nothing at all.** The entire
+A clean result from two identical builds proves nothing at all. The entire
 value of this tool is in what it changes between build 1 and build 2:
 
 | axis | build A | build B | catches |
@@ -59,12 +59,12 @@ value of this tool is in what it changes between build 1 and build 2:
 | `host` | `builder-one` / `alice` | `buildd-42.example.org` / `bob` | build-host and build-user identity baked into artifacts |
 | `jobs` | `-j1` | `-j4` | archive member order, link order, anything racing |
 
-Varying the build **path** matters as much as varying the clock. The clock class
+Varying the build path matters as much as varying the clock. The clock class
 of bug is the famous one, but path leakage is at least as common and far harder to
 notice: anything that compiles with an absolute source path ships the identity of
 one machine's directory layout inside the artifact, and two builds in the same
 directory can never show you that. It is also what every sibling repository in
-this tree turned out to be guilty of -- see "A real finding" below. The second
+this tree turned out to be guilty of, see "A real finding" below. The second
 directory name is a different *length* on purpose, so a leaked path shifts every
 later offset in the file, which is a much louder signal than a same-length
 substitution.
@@ -94,12 +94,12 @@ genuinely have two bugs.
 | `build-path` | the build directory string was found inside the artifact, at an offset, in a named ELF section |
 | `build-host` | ditto for the hostname or user name |
 | `reorder` | the two outputs are a permutation: identical byte multiset, identical line set, different order |
-| `timestamp` | the differing bytes parse as a date -- as text, or as a 4-byte little-endian epoch -- and if they match the `SOURCE_DATE_EPOCH` we handed build B, the report says so and calls it conclusive |
-| `elf-sections` | section sizes differ, so the difference is a layout shift rather than an in-place swap; names the section that moved |
+| `timestamp` | the differing bytes parse as a date, as text, or as a 4-byte little-endian epoch, and if they match the `SOURCE_DATE_EPOCH` we handed build B, the report says so and calls it conclusive |
+| `elf-sections` | section sizes differ, so the difference is a layout shift, not an in-place swap; names the section that moved |
 | `unknown` | nothing matched. Reports the byte offset, the containing ELF section, and a hex window for both sides |
 
 ELF files are located before being classified: the section table is parsed
-directly (thirty lines of `struct`, rather than parsing `readelf`'s column layout,
+directly (thirty lines of `struct`, instead of parsing `readelf`'s column layout,
 which overflows on long section names) so a verdict can say *where* in the binary
 the difference is. Files up to 4 KiB get a full byte-offset diff:
 
@@ -125,7 +125,7 @@ two trees that already exist, for when the builds happened somewhere else.
 Reproducible builds are how you detect the xz class of attack. The xz backdoor
 lived in the release tarball and not in the git tree, so anyone who could compare
 "what the published artifact is" against "what the source says it should be" would
-have seen it -- but that comparison is only possible if building the source twice
+have seen it, but that comparison is only possible if building the source twice
 gives you the same bytes. Until it does, every artifact is unfalsifiable, and
 "trust the maintainer" is the whole security model.
 
@@ -140,7 +140,7 @@ the same way is a checker that reports clean.
 ## The oracle
 
 `t/cases/` holds seven tiny self-contained projects. Six are irreproducible in
-exactly **one** known way; the seventh is correct.
+exactly one known way. The seventh is correct.
 
 | case | planted cause | required verdict |
 |---|---|---|
@@ -150,14 +150,14 @@ exactly **one** known way; the seventh is correct.
 | `ls-order` | file list from `ls`, locale-dependent collation | `reorder` |
 | `ar-stamp` | `ar rcsU`: member mtime and mode | `ar-metadata`, naming `mtime` |
 | `gzip-mtime` | `gzip` without `-n` | `gzip-mtime`, naming `MTIME` |
-| `control` | nothing -- all four shapes done right | **clean** |
+| `control` | nothing, all four shapes done right | **clean** |
 
-Every broken case asserts **both** directions, because they fail differently and
+Every broken case asserts both directions, because they fail differently and
 both are bad. A tool that says "differs" without saying why wastes a day of
 someone's time, so detection alone is not a passing grade: the cause field must
 equal the planted mechanism and the evidence text must contain the concrete value.
 A tool that says "clean" on a broken build is worse than nothing, because it is
-the reassurance that stops anyone looking -- so that is asserted too, as is the
+the reassurance that stops anyone looking, so that is asserted too, as is the
 reverse: the control must come back clean, since a checker that cries wolf on a
 correct build gets switched off, after which it catches nothing.
 
@@ -170,7 +170,7 @@ axis go clean. That is what proves the variations cause the detections rather
 than decorating the report.
 
 Writing those cases found five real bugs in unrepro itself, all of the same
-shape -- the tool naming a cause that was not there:
+shape: the tool naming a cause that was not there:
 
 - `b"Beta"` unpacks to 1635018050, which is 2021-10-23, so `ls-order`'s plain
   text manifest was confidently diagnosed as a clock bug. Printable-ASCII runs
@@ -179,7 +179,7 @@ shape -- the tool naming a cause that was not there:
   numbers like that, so a candidate with two or more zero bytes in its low word
   is now rejected.
 - once anything changes length, "the integer at offset X" compares two unrelated
-  things; binary timestamp sniffing is suppressed under a layout shift. It had
+  things. Binary timestamp sniffing is suppressed under a layout shift. It had
   been inventing dates out of relocated DWARF on four real repositories.
 - both builds run on the same day, so the date regex matched `Tue Oct  6` on both
   sides and the report quoted the *shared* part as the finding. It now prefers a
@@ -188,8 +188,8 @@ shape -- the tool naming a cause that was not there:
 
 ### A real finding
 
-Pointed at the four sibling C projects in this tree -- `cc`, `walkv`, `rx`,
-`trace`, all plain C with a `Makefile` -- unrepro first said this:
+Pointed at the four sibling C projects in this tree: `cc`, `walkv`, `rx`,
+`trace`, all plain C with a `Makefile`, unrepro first said this:
 
 ```
 0 output file(s) compared, 0 differ
@@ -204,9 +204,9 @@ and "0 differ" was being read as success. Zero observed outputs is now
 That guard then started firing on the opposite case, which took longer to spot
 because the output looks the same. A *perfectly* reproducible build rewrites its
 products to the bytes already sitting in the tree, so "has anything changed"
-answers no and the tool declined to compare the outputs it had just rebuilt --
+answers no and the tool declined to compare the outputs it had just rebuilt,
 with the compile line printed in the log right underneath. An output is now any
-file the build **rewrote**, judged by content hash, mtime or ctime, so a forced
+file the build rewrote, judged by content hash, mtime or ctime, so a forced
 rebuild over a prebuilt tree gets a real verdict and a build that genuinely does
 nothing is still `inconclusive`. ctime is in there because mtime can be put back:
 a rule that rewrites its output and then restores the timestamp is invisible to
@@ -238,7 +238,7 @@ same directory would ever have shown it.
 ### And then the fix, which is the half this file was missing
 
 The fix for all four is `-ffile-prefix-map=$(CURDIR)=.` in `CFLAGS`. It was
-applied, and this section stopped at the finding -- so the README went on
+applied, and this section stopped at the finding, so the README went on
 claiming four siblings were irreproducible after they had been fixed, which
 understates the tool and the tree it is pointed at. Re-measured:
 
@@ -253,48 +253,48 @@ $ for r in cc walkv rx trace; do unrepro check ../$r --cmd 'make -B'; done
 Which is the whole arc worth having: a tool that said "reproducible" when it
 had compared nothing, then said "not reproducible" and named the byte offset
 and the flag to fix it, then said "reproducible" once the flag was there. The
-middle step is the only one that required the tool; the first and last are
+middle step is the only one that required the tool. The first and last are
 what make the middle one believable.
 
 ## Status
 
 Works, with the limits below stated plainly.
 
-**What does not work, honestly:**
+What does not work, honestly:
 
-- **Shuffled `readdir` order is not implemented.** This is the biggest gap. Any
+- Shuffled `readdir` order is not implemented. This is the biggest gap. Any
   build that globs or walks a directory without sorting is order-dependent, and on
-  ext4 the order is stable per directory -- so the bug is invisible on the machine
+  ext4 the order is stable per directory, so the bug is invisible on the machine
   that has it and explodes on someone else's. The `ls-order` case is caught today
   only because the *locale* changed, which is the right answer for the wrong
   reason. Doing it properly needs an `LD_PRELOAD` shim over `readdir`/`readdir64`
-  that buffers each `DIR*` and reverses it; that is `PLAN.md` item 04.
-- **The wall clock cannot be pinned.** `SOURCE_DATE_EPOCH` is the only clock
+  that buffers each `DIR*` and reverses it. That is `PLAN.md` item 04.
+- The wall clock cannot be pinned. `SOURCE_DATE_EPOCH` is the only clock
   override available without `libfaketime`, which is not stdlib, and `date(1)`,
   `ar` without `U`, and anything calling `time()` ignore it. Consequence: the
   `date-cmd` case is detected only because `TZ` changed, and its `--no-vary time`
   bisection is deliberately not asserted because the answer depends on whether a
   second ticked between the two builds. A flaky assertion is worse than a missing
   one. Item 05.
-- **Varying `SOURCE_DATE_EPOCH` is not what `reprotest` does**, and it has a
+- Varying `SOURCE_DATE_EPOCH` is not what `reprotest` does, and it has a
   cost: a build that *correctly* honours it is reported as differing. The
   diagnosis says so explicitly, but `check` on a well-behaved package is noisy.
-- **`tar` and `cpio` are not diagnosed.** A `.tar.gz` gets its gzip wrapper
+- `tar` and `cpio` are not diagnosed. A `.tar.gz` gets its gzip wrapper
   explained and then nothing about the contents, which is where the interesting
   half is. Items 08 and 09.
-- **No recursion into archives.** A verdict is `libfoo.a`, never
+- No recursion into archives. A verdict is `libfoo.a`, never
   `libfoo.a(bar.o) .comment`.
-- **ELF parsing is 64-bit little-endian only.** Other ELF classes fall back to
+- ELF parsing is 64-bit little-endian only. Other ELF classes fall back to
   plain byte diffing, which still gives a correct verdict, just an unlocated one.
-- **File permissions, ownership and mtimes are never compared**, only bytes --
+- File permissions, ownership and mtimes are never compared, only bytes,
   deliberately, since the umask is varied. But a build whose output *mode* depends
   on the umask is a real bug and nothing here would catch it.
-- **The locale axis silently goes inert** on a system with only `C` and `POSIX`
-  installed. It prints a `note:` saying so rather than pretending.
-- **Outputs are "files whose content changed during the build"**, so a build that
+- The locale axis silently goes inert on a system with only `C` and `POSIX`
+  installed. It prints a `note:` saying so instead of pretending.
+- Outputs are "files whose content changed during the build", so a build that
   writes outside its own tree is missed, and intermediate `.o` files count as
-  outputs. The latter has turned out useful -- in `ar-stamp` it is what proves the
-  archive headers are the only problem -- but it was an accident, not a decision.
+  outputs. The latter has turned out useful, in `ar-stamp` it is what proves the
+  archive headers are the only problem, but it was an accident, not a decision.
 - Only one real-world codebase family has been tried: four small C projects. The
   20-package campaign that would actually measure coverage is Milestone 2.
 
@@ -307,11 +307,11 @@ is deliberately *not* used, because parsing the ELF section table directly is
 thirty lines of `struct` and does not depend on another program's output format.
 
 `check` copies the source tree twice (skipping `.git`, keeping symlinks as
-symlinks -- following them made the one sibling whose test tree deliberately
+symlinks, following them made the one sibling whose test tree deliberately
 contains a dangling link and a 42-level loop the one repo that could not be
 checked), snapshots each copy,
 builds with a scrubbed environment plus one variant's knobs, re-snapshots, and
-treats every file the build rewrote as an output -- content hash, mtime or ctime,
+treats every file the build rewrote as an output, content hash, mtime or ctime,
 because the first alone cannot see a reproducible rebuild happen. `umask` is set in the child between
 fork and exec via `preexec_fn`, the only stdlib hook for it. `--no-vary path`
 moves build A's tree aside and builds B at the identical path, because faking it
@@ -319,12 +319,12 @@ with two same-length names would leave a one-character difference that still
 leaks.
 
 Diagnosis is a flat list of independent checks over the two byte strings plus a
-context dict holding what we know we varied -- the two directory paths, the two
+context dict holding what we know we varied: the two directory paths, the two
 hostnames, the epoch we handed build B. That context is why the verdicts can be
-specific rather than suggestive: "these bytes look like a date" is a guess, while
+specific, not suggestive: "these bytes look like a date" is a guess, while
 "these bytes are the `__DATE__` rendering of the `SOURCE_DATE_EPOCH` we supplied"
-is a proof. `diff` runs the same diagnosers with a thinner context -- the two tree
-roots, no known epoch -- and the report says what that costs.
+is a proof. `diff` runs the same diagnosers with a thinner context: the two tree
+roots, no known epoch, and the report says what that costs.
 
 There is no plugin system, no abstract `Diagnoser` base class, and no format
 registry. There are nine diagnosers and they are nine `if` blocks; the second use
@@ -383,21 +383,21 @@ the same second. About one run in thirteen did not.
 *"relying on the wall clock would only catch it when a second happens to
 tick between the builds, which is exactly the flakiness that lets this class
 of bug survive in real projects."* The same trap, in a sibling case, reached
-from the other direction -- a false **positive** rather than a missed
+from the other direction: a false positive, not a missed
 negative, in a tool whose whole job is telling people their build is not
 reproducible.
 
 `ar rcSU` suppresses the symbol index, so the only variation left is the
 member headers, which is what the case is about. The member mtimes now come
-from `SOURCE_DATE_EPOCH` rather than from whenever the compiler ran, so the
+from `SOURCE_DATE_EPOCH`, not from whenever the compiler ran, so the
 `time` axis controls them. 30 consecutive clean runs.
 
 One detail from fixing it, because it cost a second attempt: the fallback
 `${SOURCE_DATE_EPOCH:-...}` must not be `1234567890`. Build A is given no
 `SOURCE_DATE_EPOCH` and build B is given `EPOCH_B = 1234567890`, so a
-fallback of that value made both builds agree and the **mtime** difference
+fallback of that value made both builds agree and the mtime difference
 disappeared, leaving only `mode` from the umask axis. The case stayed
-irreproducible, so nothing failed -- it just quietly stopped demonstrating
+irreproducible, so nothing failed, it just quietly stopped demonstrating
 the field it is named after.
 
 ## License

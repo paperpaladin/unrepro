@@ -1,4 +1,4 @@
-# unrepro -- plan
+# unrepro: plan
 
 ## Contract
 
@@ -8,8 +8,8 @@ changed, and for each differing file names the mechanism that caused it.
 `unrepro diff A B` does the comparison and diagnosis half against two files or
 two trees that already exist. `--json` on either.
 
-Exit status: 0 reproducible, 1 differences found, 2 error -- build failure, bad
-usage, or **inconclusive**, which is its own outcome and never collapses into 0.
+Exit status: 0 reproducible, 1 differences found, 2 error, build failure, bad
+usage, or inconclusive, which is its own outcome and never collapses into 0.
 
 Nothing is installed, nothing leaves the machine, and the only non-stdlib things
 touched are the build's own tools (`make`, `gcc`, `ar`, `gzip`) inside the
@@ -17,7 +17,7 @@ temporary trees.
 
 ## Hard invariant
 
-**Never report clean on a build that is not reproducible.** False negatives are
+Never report clean on a build that is not reproducible. False negatives are
 the dangerous direction: a tool that prints reassurance is the thing that stops
 anyone else from looking, and the build stays broken for years. Two consequences
 are enforced in code:
@@ -26,34 +26,34 @@ are enforced in code:
   environment, will match even when the build is hopelessly unreproducible, so a
   clean result from two *identical* builds proves nothing. Every axis is varied
   by default, and `t/test_unrepro.py` asserts that holding any one axis constant
-  makes the case planted on that axis go clean -- which is how we know the
+  makes the case planted on that axis go clean, which is how we know the
   variations are load-bearing and not decorative.
-- Zero observed outputs is `inconclusive`, exit 2 -- never `reproducible`. A tree
+- Zero observed outputs is `inconclusive`, exit 2, never `reproducible`. A tree
   that already contains its build products makes `make` a no-op, and "0 files
   compared, 0 differ" read as success is the purest form of this bug. The first
   real repo pointed at this tool hit exactly that.
 
-**Second invariant: every diagnosis names a cause that is actually present.** Not
+Second invariant: every diagnosis names a cause that is actually present. Not
 "differs", and not a guess. A `timestamp` verdict has to exhibit bytes that parse
-as a date; a `build-path` verdict has to exhibit the build directory string found
-in the artifact; an `ar-metadata` verdict has to name the header field and show
+as a date. A `build-path` verdict has to exhibit the build directory string found
+in the artifact. An `ar-metadata` verdict has to name the header field and show
 both values. When nothing matches, the verdict is `unknown` with a byte offset
-and a hex window -- an honest "I found it but cannot explain it" rather than the
+and a hex window: an honest "I found it but cannot explain it", not the
 nearest plausible-sounding cause. Three guards exist only to protect this
 invariant, each one added after the tool was caught violating it:
 
 - printable-ASCII runs are not timestamps (`b"Beta"` unpacks to 2021-10-23),
 - words with two or more zero bytes are padding, not clocks (`0x40000000`),
 - once anything changes length, every later offset is shifted, so binary
-  timestamp sniffing is suppressed -- it invented dates out of relocated DWARF on
+  timestamp sniffing is suppressed, it invented dates out of relocated DWARF on
   four real repositories before that rule existed.
 
 ## Oracle
 
 Ranked by how much each would hurt to lose.
 
-1. `t/cases/` -- seven tiny projects, six irreproducible in exactly ONE known way
-   and one correct. Every broken case asserts **both** directions: the verdict is
+1. `t/cases/`, seven tiny projects, six irreproducible in exactly ONE known way
+   and one correct. Every broken case asserts both directions: the verdict is
    not-clean, *and* the cause equals the specific planted mechanism, *and* the
    evidence text contains the concrete value. `date-macro` must say `timestamp`
    and quote the `SOURCE_DATE_EPOCH` it was handed; `ar-stamp` must say
@@ -64,20 +64,20 @@ Ranked by how much each would hurt to lose.
    false negative wearing a different hat. Crying wolf is the other way to die:
    a checker that flags a correct build gets switched off, after which it catches
    nothing.
-3. The bisection matrix -- `--no-vary AXIS` must make the case planted on that
+3. The bisection matrix, `--no-vary AXIS` must make the case planted on that
    axis go clean. This is what proves the variations cause the detections.
 4. A real build. `make test` runs unrepro against a sibling C repo and asserts
    only that it returns a verdict, because whether someone else's `CFLAGS` are
    reproducible is not this suite's business to pin.
 5. Unit tests on the format parsers and the false-positive guards, with bytes
-   constructed in the test rather than built, so a parser regression is located
+   constructed in the test, not built, so a parser regression is located
    in one line instead of somewhere inside a two-build run.
 
 ## Non-goals
 
 Being diffoscope. No recursive unpacking of nested containers, no decompilers, no
 format plugins, no HTML report. Not a build system, not a packaging tool, not a
-patch generator. No attempt to compare file permissions, ownership or mtimes --
+patch generator. No attempt to compare file permissions, ownership or mtimes,
 only bytes, because the umask is varied on purpose and metadata differences are
 the packaging layer's problem. No daemon, no server, no database.
 
@@ -90,7 +90,7 @@ than listed one per line; `git log --oneline` has the detail.
       with a byte offset and a hex window, the CLI and `--json`
       why: the varying is the whole product. Everything else is a byte compare,
            which is one line and proves nothing on its own.
-- [x] 01 the harness, and `t/cases/control` -- the case that must report clean
+- [x] 01 the harness, and `t/cases/control`: the case that must report clean
       why: the control is the canary for every variation added after it. If one
            of them makes a correct build look broken, this is what notices.
 - [x] 02 one commit per variation axis: path, time, locale, umask, host/user, -j
@@ -122,7 +122,7 @@ than listed one per line; `git log --oneline` has the detail.
       planted with nothing and exists to prove a reproducible build
       is reported as reproducible. README.md always said six.)
            They prove nothing about bugs we did not.
-- [x] 08 `--no-vary`, with the clock PINNED rather than freed when the time axis
+- [x] 08 `--no-vary`, with the clock PINNED, not freed when the time axis
       is held constant, and the bisection matrix in the suite
       why: the first version let both builds read the wall clock and was clean
            about nine times in ten. A flaky bisection teaches you to rerun until
@@ -137,24 +137,24 @@ than listed one per line; `git log --oneline` has the detail.
       that was already in the tree"
       why: found while fixing the four sibling repos. After -ffile-prefix-map
            landed, `check` reported "the build produced no new or changed files"
-           even though the compile line is right there in the output -- because
+           even though the compile line is right there in the output, because
            the rebuild was now byte-identical to the binary already sitting in
            the working tree. The inconclusive guard, which exists to prevent a
            false REPRODUCIBLE, now also fires on a *perfectly* reproducible
            build. Requiring a clean tree is the workaround; hashing before the
            first build and comparing to it is the fix.
-      done: an output is any file the build rewrote -- content hash, mtime or
-           ctime -- rather than any file whose content changed. ctime is in
+      done: an output is any file the build rewrote, content hash, mtime or
+           ctime, not any file whose content changed. ctime is in
            there because mtime can be restored and ctime cannot be set at all
            by an unprivileged caller, which closes the one hole mtime alone
            leaves. Hit again in the wild on `jail` the day before the fix,
            which is where the reproducer came from. Three assertions, and the
-           no-op case is still inconclusive -- that pair is the whole point.
- -- the variations that are still missing
+           no-op case is still inconclusive, that pair is the whole point.
+: the variations that are still missing
 
 - [x] 01 copy the source tree with symlinks intact
       why: found by pointing `check` at every sibling in turn. `tarx` was the
-           one repo that produced no verdict at all -- an unhandled
+           one repo that produced no verdict at all: an unhandled
            shutil.Error traceback, because copytree follows symlinks by
            default and tarx's test tree deliberately holds a dangling link,
            an over-long one, and a loop 42 levels deep. Refusing to follow a
@@ -168,7 +168,7 @@ than listed one per line; `git log --oneline` has the detail.
       reversed
       why: the single biggest gap. Any build that globs, or walks a directory
            without sorting, is order-dependent, and on ext4 the order is stable
-           per-directory -- so this bug is invisible on the machine that has it
+           per-directory, so this bug is invisible on the machine that has it
            and explodes on the buildd. `ls`-based lists are caught today only
            because the *locale* changed, which is the wrong reason to be right.
 - [ ] 05 pin the wall clock with an `LD_PRELOAD` shim over `time`/`gettimeofday`/
@@ -188,11 +188,11 @@ than listed one per line; `git log --oneline` has the detail.
       why: `.tar.gz` is the shape most source releases ship in, and today
            unrepro diagnoses the gzip wrapper and then gives up on the contents.
 - [ ] 09 recurse into archives: diff `.a` and `.tar.gz` members as files, so a
-      verdict reads `libfoo.a(bar.o) .comment` rather than `libfoo.a`
+      verdict reads `libfoo.a(bar.o) .comment`, not `libfoo.a`
       why: the current archive diagnosis stops at the member headers, which is
            exactly where the interesting half starts.
 
-### Milestone 2 -- a real campaign
+### Milestone 2: a real campaign
 
 - [ ] 10 run unrepro against 20 real Debian and Arch source packages, offline
       from a local mirror, and record every verdict verbatim including the
@@ -201,7 +201,7 @@ than listed one per line; `git log --oneline` has the detail.
            nothing about coverage. The honest measure of this tool is what
            fraction of real failures it can name, and the only way to learn that
            is to be wrong in public twenty times.
-- [ ] 11 build a taxonomy of causes from that campaign -- count per cause, and a
+- [ ] 11 build a taxonomy of causes from that campaign, count per cause, and a
       ranked list of the `unknown` buckets by frequency
       why: decides what to implement next on evidence instead of on which
            diagnoser is most fun to write.
@@ -215,7 +215,7 @@ than listed one per line; `git log --oneline` has the detail.
            output is designed to be pasteable into a bug report for this reason.
 - [ ] 14 publish the `unknown` cases as reproducers, with the exact two build
       directories and the hex windows
-      why: the ones we cannot explain are the most valuable thing in the
+      why: the ones we cannot explain are the most useful thing in the
            campaign and the easiest to lose.
 
 ### Milestone 3
@@ -232,15 +232,15 @@ than listed one per line; `git log --oneline` has the detail.
 
 - Varying `SOURCE_DATE_EPOCH` between the builds is not what `reprotest` does,
   and it has a real cost: a build that *correctly* honours it is reported as
-  differing. That is defensible -- the diagnosis says so explicitly, in the
-  "conclusive" line -- but it means `unrepro check` on a well-behaved,
+  differing. That is defensible, the diagnosis says so explicitly, in the
+  "conclusive" line, but it means `unrepro check` on a well-behaved,
   `SOURCE_DATE_EPOCH`-respecting package is noisy. The alternative is to pass the
   same epoch to both and vary only the wall clock, which needs item 05 first.
 - Outputs are identified as "files whose content changed during the build". That
   misses a build which writes outside its own tree, and it counts intermediate
-  files like `.o` as outputs. Counting `.o` has turned out to be a feature -- in
-  `ar-stamp` it is what proves the archive headers are the only problem -- but it
-  is still an accident rather than a decision.
+  files like `.o` as outputs. Counting `.o` has turned out to be a feature, in
+  `ar-stamp` it is what proves the archive headers are the only problem, but it
+  is still an accident, not a decision.
 - `--no-vary path` moves build A's tree aside and builds B at the identical path,
   which is correct but means the two builds are not symmetric with the default
   case. Unclear whether that ever matters.
