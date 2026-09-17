@@ -53,7 +53,7 @@ invariant, each one added after the tool was caught violating it:
 Ranked by how much each would hurt to lose.
 
 1. `t/cases/`, seven tiny projects, six irreproducible in exactly ONE known way
-   and one correct. Every broken case asserts both directions: the verdict is
+   and one correct. Every broken case asserts both directions. The verdict is
    not-clean, *and* the cause equals the specific planted mechanism, *and* the
    evidence text contains the concrete value. `date-macro` must say `timestamp`
    and quote the `SOURCE_DATE_EPOCH` it was handed; `ar-stamp` must say

@@ -98,7 +98,7 @@ genuinely have two bugs.
 | `elf-sections` | section sizes differ, so the difference is a layout shift, not an in-place swap; names the section that moved |
 | `unknown` | nothing matched. Reports the byte offset, the containing ELF section, and a hex window for both sides |
 
-ELF files are located before being classified: the section table is parsed
+ELF files are located before being classified. The section table is parsed
 directly (thirty lines of `struct`, instead of parsing `readelf`'s column layout,
 which overflows on long section names) so a verdict can say *where* in the binary
 the difference is. Files up to 4 KiB get a full byte-offset diff:
@@ -134,7 +134,7 @@ project is a small, active community doing it one package at a time: a shared
 taxonomy of causes, `SOURCE_DATE_EPOCH` as a convention, patches upstreamed for
 years. `diffoscope` is their comparison tool and is vastly more capable than this
 one. unrepro is the small, dependency-free, offline version of the same idea, with
-one thing it insists on: the *varying* is the product. A checker that builds twice
+one thing it insists on, the *varying* is the product. A checker that builds twice
 the same way is a checker that reports clean.
 
 ## The oracle
@@ -154,11 +154,11 @@ exactly one known way. The seventh is correct.
 
 Every broken case asserts both directions, because they fail differently and
 both are bad. A tool that says "differs" without saying why wastes a day of
-someone's time, so detection alone is not a passing grade: the cause field must
+someone's time, so detection alone is not a passing grade. The cause field must
 equal the planted mechanism and the evidence text must contain the concrete value.
 A tool that says "clean" on a broken build is worse than nothing, because it is
 the reassurance that stops anyone looking, so that is asserted too, as is the
-reverse: the control must come back clean, since a checker that cries wolf on a
+reverse. The control must come back clean, since a checker that cries wolf on a
 correct build gets switched off, after which it catches nothing.
 
 The control also has to prove it *built* something. A control that compiles
@@ -208,7 +208,7 @@ answers no and the tool declined to compare the outputs it had just rebuilt,
 with the compile line printed in the log right underneath. An output is now any
 file the build rewrote, judged by content hash, mtime or ctime, so a forced
 rebuild over a prebuilt tree gets a real verdict and a build that genuinely does
-nothing is still `inconclusive`. ctime is in there because mtime can be put back:
+nothing is still `inconclusive`. ctime is in there because mtime can be put back,
 a rule that rewrites its output and then restores the timestamp is invisible to
 mtime and not to ctime, which no unprivileged caller can set.
 
@@ -270,7 +270,7 @@ What does not work, honestly:
   that buffers each `DIR*` and reverses it. That is `PLAN.md` item 04.
 - The wall clock cannot be pinned. `SOURCE_DATE_EPOCH` is the only clock
   override available without `libfaketime` (not stdlib), and `date(1)`,
-  `ar` without `U`, and anything calling `time()` ignore it. Consequence: the
+  `ar` without `U`, and anything calling `time()` ignore it. Consequence. The
   `date-cmd` case is detected only because `TZ` changed, and its `--no-vary time`
   bisection is deliberately not asserted because the answer depends on whether a
   second ticked between the two builds. A flaky assertion is worse than a missing
@@ -322,7 +322,7 @@ context dict holding what we know we varied: the two directory paths, the two
 hostnames, the epoch we handed build B. That context is why the verdicts can be
 specific, not suggestive: "these bytes look like a date" is a guess, while
 "these bytes are the `__DATE__` rendering of the `SOURCE_DATE_EPOCH` we supplied"
-is a proof. `diff` runs the same diagnosers with a thinner context: the two tree
+is a proof. `diff` runs the same diagnosers with a thinner context. The two tree
 roots, no known epoch, and the report says what that costs.
 
 There is no plugin system, no abstract `Diagnoser` base class, and no format
@@ -358,7 +358,7 @@ ok   real build (cc): returns a verdict
 
 Fourteen real builds for the planted cases, four more for the prebuilt-tree,
 mtime-restoring and hostile-symlink checks, plus one build of a neighbouring repo,
-in about two seconds. There is no way to make that instant: a reproducibility
+in about two seconds. There is no way to make that instant. A reproducibility
 checker can only be tested by building things. `UNREPRO_SKIP_REAL=1` skips the
 sibling build.
 
