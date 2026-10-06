@@ -110,6 +110,7 @@ def variants():
     a["umask"], b["umask"] = 0o022, 0o077
     a["host"], b["host"] = "builder-one", "buildd-42.example.org"
     a["user"], b["user"] = "alice", "bob"
+    a["jobs"], b["jobs"] = 1, 4
     return a, b
 
 
@@ -173,7 +174,7 @@ def run_build(src, dest, v, cmd, timeout):
     # dominate the runtime and add nothing.
     shutil.copytree(src, dest, ignore=shutil.ignore_patterns(".git"))
     before = snapshot(dest)
-    argv = list(cmd)
+    argv = list(cmd) + (["-j%d" % v["jobs"]] if "jobs" in v else [])
     # umask has to be set in the child, after fork and before exec. preexec_fn
     # is the only stdlib hook for that; this process is single-threaded so the
     # usual warning about it does not apply.
