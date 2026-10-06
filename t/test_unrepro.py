@@ -167,6 +167,9 @@ PLANTED = [
     ("file-macro", "fm", "build-path", "build-a"),
     ("date-cmd", "version.h", "timestamp", ":"),
     ("ls-order", "manifest.txt", "reorder", "permutation"),
+    # True but unactionable: "a timestamp, conclusively" without saying it is
+    # an ar member header field, or that the member payloads are identical.
+    ("ar-stamp", "libstamp.a", "timestamp", "conclusive"),
 ]
 
 for case, out, cause, evidence in PLANTED:
