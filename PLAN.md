@@ -128,7 +128,19 @@ than listed one per line; `git log --oneline` has the detail.
       why: a finding has to be reproducible by a second person without them
            having to run the build.
 
-### Milestone 1 -- the variations that are still missing
+### Milestone 1
+
+- [ ] 00 distinguish "make was a no-op" from "the build reproduced an artifact
+      that was already in the tree"
+      why: found while fixing the four sibling repos. After -ffile-prefix-map
+           landed, `check` reported "the build produced no new or changed files"
+           even though the compile line is right there in the output -- because
+           the rebuild was now byte-identical to the binary already sitting in
+           the working tree. The inconclusive guard, which exists to prevent a
+           false REPRODUCIBLE, now also fires on a *perfectly* reproducible
+           build. Requiring a clean tree is the workaround; hashing before the
+           first build and comparing to it is the fix.
+ -- the variations that are still missing
 
 - [ ] 04 shuffled `readdir` order via an `LD_PRELOAD` shim wrapping
       `readdir`/`readdir64`, buffering each `DIR*`'s entries and returning them
