@@ -713,6 +713,15 @@ def compare(root_a, root_b, rels, ctx):
     return findings
 
 
+def tree_files(root):
+    out = set()
+    for d, dirs, files in os.walk(root):
+        dirs[:] = [x for x in dirs if x != ".git"]
+        for f in files:
+            out.add(os.path.relpath(os.path.join(d, f), root))
+    return out
+
+
 # ----------------------------------------------------------------------- report
 
 def render(res):
@@ -846,6 +855,38 @@ def cmd_check(args):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+def cmd_diff(args):
+    a, b = os.path.abspath(args.a), os.path.abspath(args.b)
+    # The two roots are the only path hints available here, which is enough for
+    # build-path detection if a and b really are two build trees. Without a
+    # known SOURCE_DATE_EPOCH the timestamp diagnosis falls back to "both sides
+    # parse as dates", which is weaker but still a named cause.
+    ctx = {"paths": [(a, b)], "hosts": [], "users": [], "epoch_b": None,
+           "locale_a": None, "locale_b": None}
+    if os.path.isdir(a) and os.path.isdir(b):
+        rels = tree_files(a) | tree_files(b)
+        files = compare(a, b, rels, ctx)
+    elif os.path.isfile(a) and os.path.isfile(b):
+        ba, bb = read(a), read(b)
+        rel = os.path.basename(a)
+        files = [diagnose(rel, ba, bb, ctx) if ba != bb else
+                 {"path": rel, "status": "identical", "cause": None, "detail": [],
+                  "also": [], "ranges": [], "hexdump": []}]
+    else:
+        print("unrepro: %s and %s must both be files or both be directories"
+              % (a, b), file=sys.stderr)
+        return 2
+    diff = [f for f in files if f["status"] != "identical"]
+    res = {"source": "%s  vs  %s" % (a, b), "builds": [],
+           "notes": ["comparing two existing trees: no variation was applied by "
+                     "unrepro, so a clean result here proves only that these two "
+                     "particular outputs match"],
+           "files": files,
+           "verdict": "not-reproducible" if diff else "reproducible"}
+    print(json.dumps(res, indent=2) if args.json else render(res))
+    return 1 if diff else 0
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(
         prog="unrepro",
@@ -862,6 +903,12 @@ def main(argv=None):
     c.add_argument("--keep", action="store_true", help="keep the build trees")
     c.add_argument("--json", action="store_true")
     c.set_defaults(fn=cmd_check)
+
+    d = sub.add_parser("diff", help="compare and diagnose two files or trees")
+    d.add_argument("a")
+    d.add_argument("b")
+    d.add_argument("--json", action="store_true")
+    d.set_defaults(fn=cmd_diff)
 
     args = p.parse_args(argv)
     return args.fn(args)
