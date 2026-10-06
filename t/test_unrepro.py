@@ -109,6 +109,9 @@ check("identical input yields no differing ranges", f["ranges"], [])
 # --------------------------------------- a timestamp with the epoch as evidence
 # ------------------------------------------------------- the variation plumbing
 a, b = unrepro.variants()
+truthy("build B uses a different directory name", a["dirname"] != b["dirname"])
+truthy("build B's directory name is a different LENGTH too",
+       len(a["dirname"]) != len(b["dirname"]))
 LOCALE_OK = True
 
 # ----------------------------------------------------------------- the control
