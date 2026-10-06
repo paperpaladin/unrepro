@@ -103,6 +103,14 @@ check("elf_sections declines a non-ELF", unrepro.elf_sections(b"MZ not elf"), []
 NOCTX = {"paths": [], "hosts": [], "users": [], "epoch_b": None,
          "locale_a": "C", "locale_b": "en_US.UTF-8"}
 
+f = unrepro.diagnose("p.txt", b"dir=/build/aa\n", b"dir=/build/bb\n",
+                     dict(NOCTX, paths=[("/build/aa", "/build/bb")]))
+check("an embedded build path is diagnosed as build-path", f["cause"], "build-path")
+
+f = unrepro.diagnose("h.txt", b"host=alpha.example\n", b"host=beta.example\n",
+                     dict(NOCTX, hosts=[("alpha.example", "beta.example")]))
+check("an embedded hostname is diagnosed as build-host", f["cause"], "build-host")
+
 # The honest fallback: no mechanism matched, so report the offset and the bytes
 # rather than inventing a cause.
 f = unrepro.diagnose("z.bin", b"\x00\x01\xff\xee\x11", b"\x00\x01\xff\x77\x11", NOCTX)
@@ -142,11 +150,7 @@ if not LOCALE_OK:
 # (case directory, output file, required cause, a substring of the evidence)
 PLANTED = [
     ("date-macro", "dm", "timestamp", "SOURCE_DATE_EPOCH=1234567890"),
-    # Mis-diagnosed, and not vaguely: there is no clock in this case at all.
-    # The leaked path shifts every later byte, so the binary-epoch heuristic
-    # compares unrelated offsets and invents five dates out of machine code.
-    # build-path lands next commit; the guard that stops this lands at 19.
-    ("file-macro", "fm", "timestamp", "decode as a date"),
+    ("file-macro", "fm", "build-path", "build-a"),
     ("date-cmd", "version.h", "timestamp", ":"),
 ]
 
