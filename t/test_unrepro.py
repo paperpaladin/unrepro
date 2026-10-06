@@ -117,7 +117,9 @@ check("build A gets no SOURCE_DATE_EPOCH", "SOURCE_DATE_EPOCH" in unrepro.build_
       False)
 check("build B gets SOURCE_DATE_EPOCH", unrepro.build_env(b)["SOURCE_DATE_EPOCH"],
       str(unrepro.EPOCH_B))
-LOCALE_OK = True
+LOCALE_OK = b["locale"] != a["locale"]
+if not LOCALE_OK:
+    print("note: only C locales installed; the ls-order case cannot trigger here")
 
 # ----------------------------------------------------------------- the control
 rc, res, err = run(["check", os.path.join(CASES, "control"), "--json"])
