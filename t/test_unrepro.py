@@ -92,6 +92,12 @@ check("dranges on identical input is empty", unrepro.dranges(b"abc", b"abc"), []
 # ================================================================ unit: formats
 
 
+secs = unrepro.elf_sections(open("/proc/self/exe", "rb").read()
+                            if os.path.exists("/proc/self/exe") else b"")
+truthy("elf_sections parses a real ELF64 binary", any(n == ".text" for n, *_ in secs),
+       "got %d sections" % len(secs))
+check("elf_sections declines a non-ELF", unrepro.elf_sections(b"MZ not elf"), [])
+
 # ============================================================ unit: diagnosis
 
 NOCTX = {"paths": [], "hosts": [], "users": [], "epoch_b": None,

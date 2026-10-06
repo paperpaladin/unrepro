@@ -234,6 +234,52 @@ def hexline(buf, off, n=16):
     return "%08x  %-47s  %s" % (off, h, t)
 
 
+# ------------------------------------------------------------------------- ELF
+
+def elf_sections(buf):
+    """Parse the ELF64-LE section table directly.
+
+    Thirty lines of struct beats shelling out to readelf and parsing its column
+    layout, which overflows and loses alignment on long section names.
+
+    # shortcut: ELF64 little-endian only -- that is every machine this runs on
+    # today. 32-bit and big-endian return [] and fall back to plain byte
+    # diffing, which still produces a correct (just less located) verdict.
+    """
+    if len(buf) < 0x40 or buf[:4] != b"\x7fELF" or buf[4] != 2 or buf[5] != 1:
+        return []
+    try:
+        shoff, = struct.unpack_from("<Q", buf, 0x28)
+        shentsize, shnum, shstrndx = struct.unpack_from("<HHH", buf, 0x3a)
+        if not shoff or shnum == 0 or shoff + shnum * shentsize > len(buf):
+            return []
+        raw = []
+        for i in range(shnum):
+            o = shoff + i * shentsize
+            nameoff, typ = struct.unpack_from("<II", buf, o)
+            off, size = struct.unpack_from("<QQ", buf, o + 0x18)
+            raw.append((nameoff, typ, off, size))
+        if shstrndx >= shnum:
+            return []
+        stroff, strsize = raw[shstrndx][2], raw[shstrndx][3]
+        strtab = buf[stroff:stroff + strsize]
+    except (struct.error, IndexError):
+        return []
+    secs = []
+    for nameoff, typ, off, size in raw:
+        end = strtab.find(b"\0", nameoff)
+        name = strtab[nameoff:end].decode("ascii", "replace") if 0 <= nameoff < len(strtab) else "?"
+        secs.append((name, typ, off, size))
+    return secs
+
+
+def section_at(secs, off):
+    for name, typ, o, size in secs:
+        if typ != 8 and o <= off < o + size:   # 8 == SHT_NOBITS: no file bytes
+            return name
+    return None
+
+
 # ------------------------------------------------------------------- diagnosis
 
 def diagnose(rel, a, b, ctx):
@@ -254,6 +300,26 @@ def diagnose(rel, a, b, ctx):
     def add(cause, lines):
         cands.setdefault(cause, lines)
 
+    secs_a, secs_b = elf_sections(a), elf_sections(b)
+    is_elf = bool(secs_a) and bool(secs_b)
+    sa = {n: sz for n, _, _, sz in secs_a}
+    sb = {n: sz for n, _, _, sz in secs_b}
+    sec_lines = ["  section %-20s size A=%s B=%s"
+                 % (n, sa.get(n, "absent"), sb.get(n, "absent"))
+                 for n in sorted(set(sa) | set(sb)) if sa.get(n) != sb.get(n)]
+
+    # --- ELF section table, as a locator and as a cause of last resort
+    if is_elf:
+        if sec_lines:
+            add("elf-sections",
+                ["ELF section sizes differ, so the difference is a layout shift, "
+                 "not an in-place byte swap:"] + sec_lines[:12])
+        else:
+            hit = [section_at(secs_a, lo) for lo, _ in rs[:MAX_RANGES]]
+            seen = sorted({h for h in hit if h})
+            if seen:
+                f["detail"].append("ELF section table is identical; differing "
+                                   "bytes fall in: %s" % ", ".join(seen))
 
     if len(a) != len(b) and not cands:
         add("size", ["file lengths differ: A %d bytes, B %d bytes, and no known "
@@ -263,7 +329,7 @@ def diagnose(rel, a, b, ctx):
         lo, hi = rs[0]
         add("unknown", [
             "no known mechanism matched. %d differing range(s); first at "
-            "0x%x..0x%x:" % (len(rs), lo, hi),
+            "0x%x..0x%x%s:" % (len(rs), lo, hi, sec_note(secs_a, lo)),
             "    A " + hexline(a, max(0, lo - 8) & ~0xF),
             "    B " + hexline(b, max(0, lo - 8) & ~0xF),
             "report this offset; it is a real reproducibility bug we cannot "
@@ -278,6 +344,11 @@ def diagnose(rel, a, b, ctx):
     for c in order[1:]:
         f["also"].append({"cause": c, "detail": cands[c]})
     return f
+
+
+def sec_note(secs, off):
+    n = section_at(secs, off) if secs else None
+    return " (section %s)" % n if n else ""
 
 
 # -------------------------------------------------------------------- comparing
