@@ -102,6 +102,20 @@ truthy("epoch_nums accepts a real binary epoch",
 # ================================================================ unit: formats
 
 
+def ar_member(name, mtime, uid, gid, mode, data):
+    h = (name.ljust(16)[:16] + str(mtime).ljust(12) + str(uid).ljust(6) +
+         str(gid).ljust(6) + mode.ljust(8) + str(len(data)).ljust(10))
+    return h.encode() + b"`\n" + data + (b"\n" if len(data) % 2 else b"")
+
+
+AR_A = unrepro.AR_MAGIC + ar_member("x.o/", 1700000000, 1000, 1000, "100644", b"OBJ")
+AR_B = unrepro.AR_MAGIC + ar_member("x.o/", 1234567890, 0, 0, "100600", b"OBJ")
+ms = unrepro.ar_members(AR_A)
+check("ar_members finds one member", len(ms), 1)
+check("ar_members strips the GNU name terminator", ms[0]["name"], "x.o")
+check("ar_members reads mtime", ms[0]["mtime"], "1700000000")
+check("ar_members rejects a non-archive", unrepro.ar_members(b"nope"), None)
+
 secs = unrepro.elf_sections(open("/proc/self/exe", "rb").read()
                             if os.path.exists("/proc/self/exe") else b"")
 truthy("elf_sections parses a real ELF64 binary", any(n == ".text" for n, *_ in secs),
@@ -112,6 +126,10 @@ check("elf_sections declines a non-ELF", unrepro.elf_sections(b"MZ not elf"), []
 
 NOCTX = {"paths": [], "hosts": [], "users": [], "epoch_b": None,
          "locale_a": "C", "locale_b": "en_US.UTF-8"}
+
+f = unrepro.diagnose("x.a", AR_A, AR_B, NOCTX)
+check("an ar header difference is diagnosed as ar-metadata", f["cause"], "ar-metadata")
+truthy("and names the fields", "mtime" in alltext(f) and "mode" in alltext(f))
 
 f = unrepro.diagnose("l.txt", b"Beta\nalpha\n", b"alpha\nBeta\n", NOCTX)
 check("a permutation is diagnosed as reorder", f["cause"], "reorder")
@@ -167,9 +185,7 @@ PLANTED = [
     ("file-macro", "fm", "build-path", "build-a"),
     ("date-cmd", "version.h", "timestamp", ":"),
     ("ls-order", "manifest.txt", "reorder", "permutation"),
-    # True but unactionable: "a timestamp, conclusively" without saying it is
-    # an ar member header field, or that the member payloads are identical.
-    ("ar-stamp", "libstamp.a", "timestamp", "conclusive"),
+    ("ar-stamp", "libstamp.a", "ar-metadata", "mtime"),
 ]
 
 for case, out, cause, evidence in PLANTED:
