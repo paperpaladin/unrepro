@@ -107,6 +107,7 @@ def variants():
     a["tz"], b["tz"] = "UTC", "Asia/Tokyo"
     a["epoch"], b["epoch"] = None, EPOCH_B
     a["locale"], b["locale"] = "C", best_locale()
+    a["umask"], b["umask"] = 0o022, 0o077
     return a, b
 
 
@@ -172,7 +173,8 @@ def run_build(src, dest, v, cmd, timeout):
     # usual warning about it does not apply.
     p = subprocess.run(argv, cwd=dest, env=build_env(v), timeout=timeout,
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                       )
+                       preexec_fn=((lambda: os.umask(v["umask"]))
+                                   if "umask" in v else None))
     after = snapshot(dest)
     # shortcut: an output is "a file inside the tree whose content changed".
     # That misses a build writing outside its own tree, and counts intermediates
