@@ -101,6 +101,12 @@ truthy("epoch_nums accepts a real binary epoch",
 
 # ================================================================ unit: formats
 
+GZ_A = b"\x1f\x8b\x08\x00" + (1700000000).to_bytes(4, "little") + b"\x00\x03" + b"PAY"
+GZ_B = b"\x1f\x8b\x08\x00" + (1234567890).to_bytes(4, "little") + b"\x00\x03" + b"PAY"
+check("gz_header reads MTIME", unrepro.gz_header(GZ_A)["mtime"], 1700000000)
+check("gz_header finds the payload offset", unrepro.gz_header(GZ_A)["payload"], 10)
+check("gz_header rejects a non-gzip", unrepro.gz_header(b"not a gzip at all"), None)
+
 
 def ar_member(name, mtime, uid, gid, mode, data):
     h = (name.ljust(16)[:16] + str(mtime).ljust(12) + str(uid).ljust(6) +
@@ -126,6 +132,10 @@ check("elf_sections declines a non-ELF", unrepro.elf_sections(b"MZ not elf"), []
 
 NOCTX = {"paths": [], "hosts": [], "users": [], "epoch_b": None,
          "locale_a": "C", "locale_b": "en_US.UTF-8"}
+
+f = unrepro.diagnose("x.gz", GZ_A, GZ_B, NOCTX)
+check("a gzip mtime difference is diagnosed as gzip-mtime", f["cause"], "gzip-mtime")
+truthy("and says the payload is identical", "ONLY difference" in alltext(f))
 
 f = unrepro.diagnose("x.a", AR_A, AR_B, NOCTX)
 check("an ar header difference is diagnosed as ar-metadata", f["cause"], "ar-metadata")
@@ -186,9 +196,7 @@ PLANTED = [
     ("date-cmd", "version.h", "timestamp", ":"),
     ("ls-order", "manifest.txt", "reorder", "permutation"),
     ("ar-stamp", "libstamp.a", "ar-metadata", "mtime"),
-    # Generically correct, specifically useless: "a timestamp somewhere in
-    # data.gz" rather than "the header MTIME field". Next commit.
-    ("gzip-mtime", "data.gz", "timestamp", "conclusive"),
+    ("gzip-mtime", "data.gz", "gzip-mtime", "MTIME"),
 ]
 
 for case, out, cause, evidence in PLANTED:
