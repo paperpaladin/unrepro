@@ -111,5 +111,23 @@ check("identical input yields no differing ranges", f["ranges"], [])
 a, b = unrepro.variants()
 LOCALE_OK = True
 
+# ----------------------------------------------------------------- the control
+rc, res, err = run(["check", os.path.join(CASES, "control"), "--json"])
+if res is None:
+    failed += 1
+    print("FAIL control produced no JSON\n       %s" % err[:400])
+else:
+    check("control: reported clean", res["verdict"], "reproducible")
+    check("control: exits zero", rc, 0)
+    check("control: nothing differs",
+          [f["path"] for f in res["files"] if f["status"] != "identical"], [])
+    # A control that builds nothing passes vacuously, which is the same false
+    # negative this whole suite is built to catch. Insist on real outputs, one
+    # per shape the broken cases break.
+    got = sorted(f["path"] for f in res["files"])
+    for want in ("ctl", "sorted.txt", "libctl.a", "data.gz"):
+        truthy("control: actually produced %s" % want, want in got,
+               "produced %s" % got)
+
 print("\n%d passed, %d failed" % (passed, failed))
 sys.exit(1 if failed else 0)
