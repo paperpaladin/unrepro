@@ -142,6 +142,11 @@ if not LOCALE_OK:
 # (case directory, output file, required cause, a substring of the evidence)
 PLANTED = [
     ("date-macro", "dm", "timestamp", "SOURCE_DATE_EPOCH=1234567890"),
+    # Mis-diagnosed, and not vaguely: there is no clock in this case at all.
+    # The leaked path shifts every later byte, so the binary-epoch heuristic
+    # compares unrelated offsets and invents five dates out of machine code.
+    # build-path lands next commit; the guard that stops this lands at 19.
+    ("file-macro", "fm", "timestamp", "decode as a date"),
     ("date-cmd", "version.h", "timestamp", ":"),
 ]
 
