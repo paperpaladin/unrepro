@@ -186,6 +186,9 @@ PLANTED = [
     ("date-cmd", "version.h", "timestamp", ":"),
     ("ls-order", "manifest.txt", "reorder", "permutation"),
     ("ar-stamp", "libstamp.a", "ar-metadata", "mtime"),
+    # Generically correct, specifically useless: "a timestamp somewhere in
+    # data.gz" rather than "the header MTIME field". Next commit.
+    ("gzip-mtime", "data.gz", "timestamp", "conclusive"),
 ]
 
 for case, out, cause, evidence in PLANTED:
