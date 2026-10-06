@@ -108,6 +108,8 @@ def variants():
     a["epoch"], b["epoch"] = None, EPOCH_B
     a["locale"], b["locale"] = "C", best_locale()
     a["umask"], b["umask"] = 0o022, 0o077
+    a["host"], b["host"] = "builder-one", "buildd-42.example.org"
+    a["user"], b["user"] = "alice", "bob"
     return a, b
 
 
@@ -123,6 +125,10 @@ def build_env(v):
         env["TZ"] = v["tz"]
     if "locale" in v:
         env["LC_ALL"] = env["LANG"] = v["locale"]
+    if "host" in v:
+        env["HOSTNAME"] = v["host"]
+    if "user" in v:
+        env["USER"] = env["LOGNAME"] = v["user"]
     if v.get("epoch") is not None:
         env["SOURCE_DATE_EPOCH"] = str(v["epoch"])
     return env
@@ -371,6 +377,8 @@ def cmd_check(args):
         rels = set(outs["A"]) | set(outs["B"])
         ctx = {}
         ctx["paths"] = [(roots["A"], roots["B"])]
+        ctx["hosts"] = [(a["host"], b["host"])] if "host" in a else []
+        ctx["users"] = [(a["user"], b["user"])] if "user" in a else []
         ctx["epoch_b"] = b.get("epoch")
         ctx["locale_a"], ctx["locale_b"] = a.get("locale"), b.get("locale")
         files = compare(roots["A"], roots["B"], rels, ctx)
