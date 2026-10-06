@@ -84,6 +84,8 @@ def variants():
     # much louder signal than a same-length substitution, and it also catches
     # builds that pad or truncate the path.
     a["dirname"], b["dirname"] = "build-a", "b-second-build-dir-with-a-much-longer-name"
+    a["tz"], b["tz"] = "UTC", "Asia/Tokyo"
+    a["epoch"], b["epoch"] = None, EPOCH_B
     return a, b
 
 
@@ -95,6 +97,8 @@ def build_env(v):
         "SHELL": "/bin/sh",
         "TERM": "dumb",
     }
+    if "tz" in v:
+        env["TZ"] = v["tz"]
     if v.get("epoch") is not None:
         env["SOURCE_DATE_EPOCH"] = str(v["epoch"])
     return env
@@ -339,6 +343,7 @@ def cmd_check(args):
         rels = set(outs["A"]) | set(outs["B"])
         ctx = {}
         ctx["paths"] = [(roots["A"], roots["B"])]
+        ctx["epoch_b"] = b.get("epoch")
         files = compare(roots["A"], roots["B"], rels, ctx)
         diff = [f for f in files if f["status"] != "identical"]
         res = {"source": src,
