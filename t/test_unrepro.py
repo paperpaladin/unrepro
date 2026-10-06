@@ -89,6 +89,16 @@ check("dranges reports a length difference",
       unrepro.dranges(b"abc", b"abcde"), [(3, 5)])
 check("dranges on identical input is empty", unrepro.dranges(b"abc", b"abc"), [])
 
+# The guard that stops every text file from looking full of timestamps.
+check("epoch_nums rejects printable ASCII", unrepro.epoch_nums(b"Beta", 0, 4), [])
+check("epoch_nums rejects a newline-bearing text run",
+      unrepro.epoch_nums(b"n\nGa", 0, 4), [])
+check("epoch_nums rejects round padding words",
+      unrepro.epoch_nums(b"\x00\x00\x00\x40", 0, 4), [])
+truthy("epoch_nums accepts a real binary epoch",
+       any(v == 1234567890 for _, _, v in
+           unrepro.epoch_nums(b"\xd2\x02\x96\x49", 0, 4)))
+
 # ================================================================ unit: formats
 
 

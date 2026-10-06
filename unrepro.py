@@ -46,6 +46,11 @@ EPOCH_B = 1234567890
 # it is just a number that happens to be 4 bytes wide.
 PLAUSIBLE = (631152000, 2208988800)
 
+# Bytes that can plausibly be text. A candidate timestamp made entirely of them
+# is almost certainly a string: b"Beta" unpacks to 1635018050 = 2021-10-23, and
+# b"n\nGa" to 1194291310 = 2007-11-05.
+TEXTISH = frozenset(b"\t\n\r") | frozenset(range(0x20, 0x7f))
+
 # shortcut: a flat size threshold for the full byte-offset diff. A 4KiB file
 # gets every differing range dumped; a 4MiB one gets none, even when the single
 # differing byte would have been the whole answer. Upgrade: always dump, but cap
@@ -322,17 +327,42 @@ def text_dates(buf):
 def epoch_nums(buf, lo, hi):
     """Little-endian integers near a differing range that look like a date.
 
+    The TEXTISH guard is the whole difference between a diagnosis and a
+    coincidence: without it every text file on earth is full of "timestamps".
+    Found by running this tool against its own ls-order case, which it
+    confidently mis-diagnosed as a clock bug.
     """
     seen, out = set(), []
     for p in range(max(0, lo - 7), min(len(buf), hi + 1)):
         for fmt, n in (("<I", 4), ("<Q", 8)):
             if p + n > len(buf):
                 continue
+            if all(c in TEXTISH for c in buf[p:p + n]):
+                continue
+            # A value with two or more zero bytes in its low word is a round
+            # number -- 0x34000000, 0x40000000 -- which is what shifted machine
+            # code and padding look like, not what a clock looks like. Real
+            # epochs in this era have no zero byte at all.
+            if buf[p:p + 4].count(0) > 1:
+                continue
             v, = struct.unpack_from(fmt, buf, p)
             if PLAUSIBLE[0] <= v <= PLAUSIBLE[1] and v not in seen:
                 seen.add(v)
                 out.append((p, n, v))
     return out
+
+
+def pick_dates(da, db):
+    """Prefer matches that actually DIFFER between the two sides.
+
+    Both builds ran on the same day, so "Tue Oct  6" matches in both and is not
+    the finding; the clock time beside it is. Reporting the shared prefix makes
+    the tool look like it is guessing.
+    """
+    sa, sb = {x[0] for x in da}, {x[0] for x in db}
+    pa = [x for x in da if x[0] not in sb] or da
+    pb = [x for x in db if x[0] not in sa] or db
+    return pa[0], pb[0]
 
 
 def epoch_forms(e):
@@ -379,6 +409,13 @@ def diagnose(rel, a, b, ctx):
     sec_lines = ["  section %-20s size A=%s B=%s"
                  % (n, sa.get(n, "absent"), sb.get(n, "absent"))
                  for n in sorted(set(sa) | set(sb)) if sa.get(n) != sb.get(n)]
+    # Once anything has changed LENGTH, every byte after it sits at a different
+    # offset in the two files, so comparing "the integer at offset X" compares
+    # two unrelated things. Sniffing for binary timestamps under those
+    # conditions invents dates out of shifted machine code -- it did exactly
+    # that on four real repos before this flag existed. Text matches survive,
+    # because a string is still a string wherever it landed.
+    shifted = len(a) != len(b) or bool(sec_lines)
 
     # --- a build path baked into the artifact
     for pa, pb in ctx.get("paths", []):
@@ -417,8 +454,11 @@ def diagnose(rel, a, b, ctx):
         wa, wb = window(a, lo, hi), window(b, lo, hi)
         da, db = text_dates(wa), text_dates(wb)
         if da and db:
+            ma_, mb_ = pick_dates(da, db)
             tlines.append("  at 0x%x%s: A text %r (%s) / B text %r"
-                          % (lo, sec_note(secs_a, lo), da[0][0], da[0][1], db[0][0]))
+                          % (lo, sec_note(secs_a, lo), ma_[0], ma_[1], mb_[0]))
+        if shifted:
+            continue
         ea, eb = epoch_nums(a, lo, hi), epoch_nums(b, lo, hi)
         if ea and eb and ea[0][2] != eb[0][2]:
             tlines.append("  at 0x%x%s: A %d-byte LE %d (%s) / B %d (%s)"
