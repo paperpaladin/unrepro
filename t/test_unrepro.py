@@ -113,6 +113,11 @@ f = unrepro.diagnose("e.txt", b"same", b"same", NOCTX)
 check("identical input yields no differing ranges", f["ranges"], [])
 
 # --------------------------------------- a timestamp with the epoch as evidence
+f = unrepro.diagnose("v.h", b'#define D "Oct  6 2026"\n', b'#define D "Feb 13 2009"\n',
+                     dict(NOCTX, epoch_b=1234567890))
+check("a date pair is diagnosed as timestamp", f["cause"], "timestamp")
+truthy("and the known epoch makes it conclusive", "conclusive" in alltext(f))
+
 # ------------------------------------------------------- the variation plumbing
 a, b = unrepro.variants()
 truthy("build B uses a different directory name", a["dirname"] != b["dirname"])
@@ -135,10 +140,7 @@ if not LOCALE_OK:
 
 # (case directory, output file, required cause, a substring of the evidence)
 PLANTED = [
-    # Detected, but not yet explained -- the timestamp diagnoser is the next
-    # commit. Asserting "unknown" here keeps the suite honest about what the
-    # tool can actually do at this point in history.
-    ("date-macro", "dm", "unknown", "no known mechanism"),
+    ("date-macro", "dm", "timestamp", "SOURCE_DATE_EPOCH=1234567890"),
 ]
 
 for case, out, cause, evidence in PLANTED:
