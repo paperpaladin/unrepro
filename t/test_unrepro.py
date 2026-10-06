@@ -183,6 +183,8 @@ check("build A gets no SOURCE_DATE_EPOCH", "SOURCE_DATE_EPOCH" in unrepro.build_
       False)
 check("build B gets SOURCE_DATE_EPOCH", unrepro.build_env(b)["SOURCE_DATE_EPOCH"],
       str(unrepro.EPOCH_B))
+check("--no-vary path holds the directory constant",
+      unrepro.variants(["path"])[1]["dirname"], a["dirname"])
 LOCALE_OK = b["locale"] != a["locale"]
 if not LOCALE_OK:
     print("note: only C locales installed; the ls-order case cannot trigger here")
@@ -223,6 +225,32 @@ for case, out, cause, evidence in PLANTED:
     truthy("%s: evidence mentions %r" % (case, evidence), evidence in alltext(f),
            "detail was: " + alltext(f)[:300])
     truthy("%s: reports at least one byte range" % case, len(f["ranges"]) >= 1)
+
+# ------------------------------------------- the variations are load-bearing
+#
+# Each planted case is irreproducible along exactly one axis, so holding that one
+# axis constant must make it go clean. This is what proves the variations are
+# doing the work rather than decorating the report: if --no-vary time still
+# caught the __DATE__ case, something other than the clock would be responsible
+# and the diagnosis would be a coincidence.
+# date-cmd is deliberately absent: date(1) honours no clock override at all, so
+# the only way to pin it is libfaketime, which is not stdlib. Its bisection would
+# be decided by whether a second ticked between the two builds, and a flaky
+# assertion is worse than a missing one. Said plainly in README and PLAN instead.
+BISECT = [
+    ("date-macro", "time"),
+    ("file-macro", "path"),
+    ("gzip-mtime", "time"),
+    ("ar-stamp", "time,umask"),   # ar records both the clock and the file mode
+    ("ls-order", "locale"),
+]
+for case, axis in BISECT:
+    if case == "ls-order" and not LOCALE_OK:
+        continue
+    rc, res, err = run(["check", os.path.join(CASES, case), "--no-vary", axis,
+                        "--json"])
+    check("%s goes clean with --no-vary %s" % (case, axis),
+          res["verdict"] if res else err, "reproducible")
 
 # ----------------------------------------------------------------- the control
 rc, res, err = run(["check", os.path.join(CASES, "control"), "--json"])
