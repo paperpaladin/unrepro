@@ -152,6 +152,9 @@ PLANTED = [
     ("date-macro", "dm", "timestamp", "SOURCE_DATE_EPOCH=1234567890"),
     ("file-macro", "fm", "build-path", "build-a"),
     ("date-cmd", "version.h", "timestamp", ":"),
+    # Mis-diagnosed: b"Beta" unpacks to a plausible epoch, so a text manifest
+    # reads as a clock bug. Pinned here, fixed in the next two commits.
+    ("ls-order", "manifest.txt", "timestamp", "decode as a date"),
 ]
 
 for case, out, cause, evidence in PLANTED:
