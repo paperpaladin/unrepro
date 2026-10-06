@@ -57,8 +57,11 @@ PAD = 48              # bytes of context either side of a differing range
 # Priority order for the verdict. Earlier causes name a more specific mechanism,
 # so they win when several diagnoses fire on the same file; the rest are kept as
 # "also", because a file can genuinely have two bugs.
+# "reorder" outranks "timestamp" deliberately: if the two outputs have an
+# identical byte multiset then nothing was rewritten, only moved, so a date
+# cannot be the cause however much the bytes look like one.
 PRIORITY = ["gzip-mtime", "ar-order", "ar-metadata", "build-path", "build-host",
-            "timestamp", "reorder", "elf-sections", "size", "unknown"]
+            "reorder", "timestamp", "elf-sections", "size", "unknown"]
 
 FIXES = {
     "gzip-mtime": "gzip -n (writes MTIME=0 into the header)",
@@ -435,6 +438,22 @@ def diagnose(rel, a, b, ctx):
                 ["both sides parse as plausible dates, so this is the clock, "
                  "not the source"])
         add("timestamp", head + tlines + proof + tail)
+
+    # --- reordering: same content, different sequence
+    if sorted(a) == sorted(b):
+        la, lb = a.splitlines(), b.splitlines()
+        if sorted(la) == sorted(lb):
+            add("reorder", [
+                "the two outputs are a permutation of each other: identical "
+                "byte multiset, identical set of %d line(s), different order." % len(la),
+                "  A order: %s" % " | ".join(x.decode("latin-1", "replace") for x in la[:6]),
+                "  B order: %s" % " | ".join(x.decode("latin-1", "replace") for x in lb[:6]),
+                "we varied LC_ALL from %r to %r; glibc collation ignores case "
+                "and punctuation outside C, so ls/sort/* return a different "
+                "sequence" % (ctx.get("locale_a"), ctx.get("locale_b")),
+            ])
+        else:
+            add("reorder", ["identical byte multiset, different byte order"])
 
     # --- ELF section table, as a locator and as a cause of last resort
     if is_elf:
