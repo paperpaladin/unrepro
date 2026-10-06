@@ -758,6 +758,29 @@ def cmd_check(args):
         ctx["users"] = [(a["user"], b["user"])] if "user" in a else []
         ctx["epoch_b"] = b.get("epoch")
         ctx["locale_a"], ctx["locale_b"] = a.get("locale"), b.get("locale")
+        # HARD INVARIANT: never report clean on a build we did not actually
+        # observe. A source tree with its products already committed (or just
+        # left lying around) makes `make` a no-op, and the honest verdict for
+        # zero compared outputs is "inconclusive", not "reproducible". This is
+        # the exact false negative the tool exists to avoid, and the first real
+        # repo it was pointed at hit it.
+        if not rels:
+            msg = ("unrepro: the build produced no new or changed files, so "
+                   "there is nothing to compare.\n"
+                   "  Most likely the tree already contains its build products "
+                   "and make had nothing to do.\n"
+                   "  Retry with --cmd 'make -B', or point it at a clean "
+                   "checkout.\n"
+                   "  Build A said:\n%s"
+                   % "".join("    " + l + "\n" for l in
+                             logs["A"].splitlines()[:10] or ["(no output)"]))
+            if args.json:
+                print(json.dumps({"source": src, "verdict": "inconclusive",
+                                  "reason": "no outputs observed",
+                                  "files": [], "notes": notes}, indent=2))
+            else:
+                print(msg, file=sys.stderr)
+            return 2
         files = compare(roots["A"], roots["B"], rels, ctx)
         diff = [f for f in files if f["status"] != "identical"]
         res = {"source": src,

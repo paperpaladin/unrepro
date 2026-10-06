@@ -242,5 +242,14 @@ else:
         truthy("control: actually produced %s" % want, want in got,
                "produced %s" % got)
 
+# ------------------------------------- the invariant: never clean on no evidence
+with tempfile.TemporaryDirectory() as tmp:
+    with open(os.path.join(tmp, "Makefile"), "w") as fh:
+        fh.write("all:\n\t@true\n")
+    rc, res, err = run(["check", tmp, "--json"])
+    check("a build that produces nothing is inconclusive, not reproducible",
+          res["verdict"] if res else err, "inconclusive")
+    check("and exits nonzero", rc, 2)
+
 print("\n%d passed, %d failed" % (passed, failed))
 sys.exit(1 if failed else 0)
