@@ -92,7 +92,33 @@ AXES = {
     "umask": ["umask"],
     "host": ["host", "user"],
     "jobs": ["jobs"],
+    "readdir": ["readdir"],
 }
+
+# Built on demand into the scratch directory and preloaded into build B
+# only. See t/readdir_shim.c for why the order is reversed rather than
+# shuffled.
+SHIM_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "t", "readdir_shim.c")
+
+
+def build_shim(scratch):
+    """Compile the readdir shim, or return None and say why.
+
+    None is a real answer and is reported, never silently treated as
+    "that axis agreed". A tool that drops an axis it could not test and
+    still prints REPRODUCIBLE is making the claim this program exists
+    to prevent.
+    """
+    if not os.path.exists(SHIM_SRC):
+        return None, "t/readdir_shim.c is missing"
+    so = os.path.join(scratch, "readdir_shim.so")
+    r = subprocess.run(["cc", "-shared", "-fPIC", "-O1", "-w",
+                        "-o", so, SHIM_SRC, "-ldl"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return None, "cc could not build the shim: %s" % r.stderr.strip()[:120]
+    return so, None
 
 
 def best_locale():
@@ -171,6 +197,10 @@ def variants(disabled=()):
     a["host"], b["host"] = "builder-one", "buildd-42.example.org"
     a["user"], b["user"] = "alice", "bob"
     a["jobs"], b["jobs"] = 1, 4
+    # The shim path is filled in later, once there is a scratch
+    # directory to build it in. False means "this build does not get
+    # it", which is build A always.
+    a["readdir"], b["readdir"] = False, True
     for axis in disabled:
         if axis not in AXES:
             raise SystemExit("unrepro: unknown variation axis %r (have: %s)"
@@ -209,6 +239,8 @@ def build_env(v):
         env["USER"] = env["LOGNAME"] = v["user"]
     if v.get("epoch") is not None:
         env["SOURCE_DATE_EPOCH"] = str(v["epoch"])
+    if v.get("readdir_so"):
+        env["LD_PRELOAD"] = v["readdir_so"]
     return env
 
 
@@ -226,6 +258,9 @@ def describe(v, root):
     if "epoch" in v:
         bits.append("SOURCE_DATE_EPOCH=%s"
                     % (v["epoch"] if v["epoch"] is not None else "unset"))
+    if v.get("readdir"):
+        bits.append("readdir=reversed" if v.get("readdir_so")
+                    else "readdir=NOT VARIED")
     return "  ".join(bits)
 
 
@@ -907,6 +942,19 @@ def cmd_check(args):
     cmd = args.cmd.split() if args.cmd else ["make"]
     tmp = tempfile.mkdtemp(prefix="unrepro.")
     try:
+        # The readdir shim, built into the scratch directory. If it
+        # cannot be built the axis is INERT and says so in the header
+        # and in the notes, exactly like the locale axis does when no
+        # non-C locale is installed. An axis that quietly stops varying
+        # is how this tool would start lying.
+        if b.get("readdir"):
+            so, why = build_shim(tmp)
+            if so:
+                b["readdir_so"] = so
+            else:
+                notes.append("readdir variation is INERT: %s, so builds that "
+                             "depend on directory order cannot be detected "
+                             "here" % why)
         roots, logs = {}, {}
         outs = {}
         # --no-vary path means literally the same directory, which is only

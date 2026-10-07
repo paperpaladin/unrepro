@@ -163,7 +163,7 @@ than listed one per line; `git log --oneline` has the detail.
            check, and hard rule 4 was unverifiable for it. Copying links as
            links is also the more faithful copy of a build input.
 
-- [ ] 04 shuffled `readdir` order via an `LD_PRELOAD` shim wrapping
+- [x] 04 shuffled `readdir` order via an `LD_PRELOAD` shim wrapping
       `readdir`/`readdir64`, buffering each `DIR*`'s entries and returning them
       reversed
       why: the single biggest gap. Any build that globs, or walks a directory
@@ -171,6 +171,29 @@ than listed one per line; `git log --oneline` has the detail.
            per-directory, so this bug is invisible on the machine that has it
            and explodes on the buildd. `ls`-based lists are caught today only
            because the *locale* changed, and that is the wrong reason to be right.
+      done: t/readdir_shim.c, built per run into the scratch directory
+           and preloaded into build B only. Reversed rather than
+           shuffled: a random order makes a failure depend on a seed
+           nobody recorded, and "is this reproducible" must not be
+           answered differently on two runs of the tool.
+           The new case is t/cases/readdir-order, and it uses `ls -U`,
+           which does not sort. That is the point: no locale change
+           touches it, so the existing ls-order case cannot find it and
+           this axis is the only thing that can. Its bisection asserts
+           the other direction, that `--no-vary readdir` makes it clean.
+           It builds TWO manifests, one from `ls` and one from python3,
+           because glibc exports readdir and readdir64 separately and
+           different programs resolve different ones. The first shim
+           wrapped only readdir and changed nothing at all for Python,
+           which looks exactly like a build that was already
+           order-independent. A suite checking one output would pass
+           with half the shim neutralised, so it checks both, and that
+           was measured by neutralising each reversal in turn and
+           watching the differ count fall from 2 to 1 while every
+           assertion stayed green.
+           If the shim cannot be built the axis is INERT and says so in
+           the header and the notes, the same way the locale axis does
+           when no non-C locale is installed.
 - [ ] 05 pin the wall clock with an `LD_PRELOAD` shim over `time`/`gettimeofday`/
       `clock_gettime`, offsetting it by months between the two builds
       why: `date(1)`, `ar` without `U`, and anything calling `time()` ignore

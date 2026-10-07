@@ -232,6 +232,10 @@ PLANTED = [
     ("ls-order", "manifest.txt", "reorder", "permutation"),
     ("ar-stamp", "libstamp.a", "ar-metadata", "mtime"),
     ("gzip-mtime", "data.gz", "gzip-mtime", "MTIME"),
+    # Raw directory order, not collation. `ls -U` does not sort, so no
+    # locale change touches this one and the readdir axis is the only
+    # thing that can find it. Its bisection below is what proves that.
+    ("readdir-order", "manifest.txt", "reorder", "permutation"),
 ]
 
 for case, out, cause, evidence in PLANTED:
@@ -295,13 +299,14 @@ BISECT = [
     ("gzip-mtime", "time"),
     ("ar-stamp", "time,umask"),   # ar records both the clock and the file mode
     ("ls-order", "locale"),
+    ("readdir-order", "readdir"),
 ]
 # BISECT is a subset of the planted cases, chosen for having a single
 # identifiable axis. Pinned the same way: a list that shrank to nothing used
 # to take its assertions with it silently.
 truthy("every bisection case is a planted case",
        all(c in _planted_names for c, _ in BISECT))
-check("the bisection set is the expected size", len(BISECT), 5)
+check("the bisection set is the expected size", len(BISECT), 6)
 
 for case, axis in BISECT:
     if case == "ls-order" and not LOCALE_OK:
@@ -314,6 +319,29 @@ for case, axis in BISECT:
                         "--json"])
     check("%s goes clean with --no-vary %s" % (case, axis),
           res["verdict"] if res else err, "reproducible")
+
+# ------------------------------- both readdir symbols, not just one
+#
+# glibc exports readdir and readdir64 separately and different
+# programs resolve different ones: coreutils ls takes readdir, CPython
+# takes readdir64. The first shim wrapped only readdir and changed
+# nothing at all for Python, which looks exactly like a build that was
+# already order-independent.
+#
+# readdir-order builds two manifests, one from each lister, so BOTH
+# outputs must come back reordered. Checking only the named output in
+# PLANTED above would pass with half the shim neutralised: that was
+# measured, not supposed, by neutralising each reversal in turn and
+# watching the differ count fall from 2 to 1 while every assertion
+# stayed green.
+rc, res, err = run(["check", os.path.join(CASES, "readdir-order"), "--json"])
+if res is None:
+    failed += 1
+    print("FAIL readdir-order produced no JSON for the two-symbol check")
+else:
+    reordered = [f for f in res.get("files", []) if f.get("cause") == "reorder"]
+    check("both listers are reordered, so both readdir symbols are wrapped",
+          len(reordered), 2)
 
 # ----------------------------------------------------------------- the control
 rc, res, err = run(["check", os.path.join(CASES, "control"), "--json"])
