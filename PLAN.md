@@ -130,7 +130,7 @@ than listed one per line; `git log --oneline` has the detail.
 
 ### Milestone 1
 
-- [ ] 00 distinguish "make was a no-op" from "the build reproduced an artifact
+- [x] 00 distinguish "make was a no-op" from "the build reproduced an artifact
       that was already in the tree"
       why: found while fixing the four sibling repos. After -ffile-prefix-map
            landed, `check` reported "the build produced no new or changed files"
@@ -140,6 +140,13 @@ than listed one per line; `git log --oneline` has the detail.
            false REPRODUCIBLE, now also fires on a *perfectly* reproducible
            build. Requiring a clean tree is the workaround; hashing before the
            first build and comparing to it is the fix.
+      done: an output is any file the build rewrote -- content hash, mtime or
+           ctime -- rather than any file whose content changed. ctime is in
+           there because mtime can be restored and ctime cannot be set at all
+           by an unprivileged caller, which closes the one hole mtime alone
+           leaves. Hit again in the wild on `jail` the day before the fix,
+           which is where the reproducer came from. Three assertions, and the
+           no-op case is still inconclusive -- that pair is the whole point.
  -- the variations that are still missing
 
 - [ ] 04 shuffled `readdir` order via an `LD_PRELOAD` shim wrapping
