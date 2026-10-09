@@ -326,6 +326,31 @@ with tempfile.TemporaryDirectory() as tmp:
            res is not None and "out.txt" in [f["path"] for f in res["files"]],
            "got %s" % (res["files"] if res else err[:200]))
 
+# A source tree holding hostile symlinks must still be checkable. copytree
+# follows links by default, which turns a dangling link into a raised
+# shutil.Error and a link loop into ELOOP -- reported as an unhandled
+# traceback, with no verdict at all. Found on tarx, whose test tree keeps a
+# dangling link, an over-long one and a 42-level loop on purpose, because
+# refusing to follow a hostile symlink is what tarx is for.
+with tempfile.TemporaryDirectory() as tmp:
+    with open(os.path.join(tmp, "Makefile"), "w") as fh:
+        fh.write("all:\n\t$(CC) -O2 -o prog prog.c\n")
+    with open(os.path.join(tmp, "prog.c"), "w") as fh:
+        fh.write("int main(void){return 0;}\n")
+    os.symlink("nowhere-at-all", os.path.join(tmp, "dangling"))
+    os.mkdir(os.path.join(tmp, "d"))
+    os.symlink("..", os.path.join(tmp, "d", "loop"))
+    os.symlink("d", os.path.join(tmp, "to_dir"))
+
+    rc, res, err = run(["check", tmp, "--cmd", "make -B", "--json"])
+    truthy("a tree with dangling and looping symlinks still gets a verdict",
+           res is not None and res["verdict"] in ("reproducible",
+                                                  "not-reproducible"),
+           "rc=%s %s" % (rc, (err or "")[:300]))
+    truthy("and the build inside it actually produced something",
+           res is not None and "prog" in [f["path"] for f in res["files"]],
+           "compared %s" % ([f["path"] for f in res["files"]] if res else err[:200]))
+
 # ------------------------------------- the invariant: never clean on no evidence
 with tempfile.TemporaryDirectory() as tmp:
     with open(os.path.join(tmp, "Makefile"), "w") as fh:
