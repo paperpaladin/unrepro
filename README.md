@@ -279,7 +279,7 @@ Works, with the limits below stated plainly.
 
 ## Design
 
-One file, `unrepro.py`, about 920 lines, Python 3 stdlib only. No diffoscope, no
+One file, `unrepro.py`, about 985 lines, Python 3 stdlib only. No diffoscope, no
 `requests`, no third-party anything, no network, nothing installed. The build's
 own tools (`make`, `gcc`, `ar`, `gzip`) run inside the temporary trees; `readelf`
 is deliberately *not* used, because parsing the ELF section table directly is
