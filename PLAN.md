@@ -117,7 +117,10 @@ than listed one per line; `git log --oneline` has the detail.
       why: found by pointing the tool at four sibling repos, where it said
            "0 compared, 0 differ, REPRODUCIBLE". The worst possible bug here.
 - [x] 07 a real sibling build inside `make test`
-      why: seven planted cases prove the diagnoses are right on bugs we wrote.
+      why: six planted cases prove the diagnoses are right on bugs we wrote.
+      (t/cases/ holds seven directories; one is `control`, which is
+      planted with nothing and exists to prove a reproducible build
+      is reported as reproducible. README.md always said six.)
            They prove nothing about bugs we did not.
 - [x] 08 `--no-vary`, with the clock PINNED rather than freed when the time axis
       is held constant, and the bisection matrix in the suite
@@ -194,7 +197,7 @@ than listed one per line; `git log --oneline` has the detail.
 - [ ] 10 run unrepro against 20 real Debian and Arch source packages, offline
       from a local mirror, and record every verdict verbatim including the
       `unknown` ones
-      why: seven planted cases prove the diagnoses are correct; they prove
+      why: six planted cases prove the diagnoses are correct; they prove
            nothing about coverage. The honest measure of this tool is what
            fraction of real failures it can name, and the only way to learn that
            is to be wrong in public twenty times.

@@ -23,8 +23,14 @@ unrepro: /home/x/projects/unrepro/t/cases/ar-stamp
       member payloads are identical
       fix: ar D (deterministic: mtime/uid/gid zeroed, mode normalised)
 
-VERDICT: NOT REPRODUCIBLE -- 1 of 1 output(s) differ: ar-metadata
+VERDICT: NOT REPRODUCIBLE -- 1 of 3 output(s) differ: ar-metadata
 ```
+
+(That line read `1 of 1` until an audit noticed it contradicts the
+`3 output file(s) compared, 1 differ` eight lines above it in the same
+block. `unrepro.py` prints `len(diff)` of `len(res["files"])`, so the two
+numbers cannot both come from one run -- the sample had been edited by
+hand, which makes a transcript evidence for nothing.)
 
 The `.o` files are byte-identical and the archive members are byte-identical; the
 only thing wrong is the 60-byte header in front of each one. "libstamp.a differs"
