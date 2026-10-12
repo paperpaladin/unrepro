@@ -109,9 +109,44 @@ def best_locale():
         have = []
     low = {h.lower().replace("-", ""): h for h in have}
     for want in ("en_us.utf8", "en_gb.utf8", "de_de.utf8", "c.utf8"):
-        if want in low:
+        if want in low and collates_unlike_c(low[want]):
             return low[want]
     return "C"
+
+
+def collates_unlike_c(name):
+    """Does `name` actually sort differently from C?
+
+    The name is not the question, and this function exists because the
+    candidate list above ends in "c.utf8" -- which is a non-C locale by name
+    and collates BYTE-WISE, exactly like C:
+
+        LC_ALL=C         sort  ->  B a
+        LC_ALL=C.UTF-8   sort  ->  B a
+        LC_ALL=en_US.UTF-8 sort ->  a B
+
+    So on a system carrying only C, POSIX and C.UTF-8 -- Debian slim and
+    many container bases -- best_locale() used to return C.UTF-8, the
+    ls-order case would run, the two builds would sort identically, and
+    `ls-order` would be reported as a FALSE POSITIVE: unrepro accusing a
+    reproducible build because its own variation did nothing.
+    Its docstring already promised "a locale whose collation differs from
+    C"; it just checked the spelling instead.
+
+    Two lines whose order differs under any case-insensitive collation are
+    enough, and asking `sort` is better than asking a table of locale names.
+    """
+    probe = b"B\na\n"
+    try:
+        c = subprocess.run(["sort"], input=probe, capture_output=True,
+                           timeout=20, env=dict(os.environ, LC_ALL="C"))
+        other = subprocess.run(["sort"], input=probe, capture_output=True,
+                               timeout=20, env=dict(os.environ, LC_ALL=name))
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if c.returncode or other.returncode:
+        return False
+    return c.stdout != other.stdout
 
 
 def variants(disabled=()):
