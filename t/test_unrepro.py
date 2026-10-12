@@ -269,6 +269,25 @@ for case, out, cause, evidence in PLANTED:
 # the only way to pin it is libfaketime, which is not stdlib. Its bisection would
 # be decided by whether a second ticked between the two builds, and a flaky
 # assertion is worse than a missing one. Said plainly in README and PLAN instead.
+# Both lists are hard-coded, and nothing asserted their length or
+# cross-checked them against t/cases/ on disk. Replacing them with [] gave
+# "69 passed, 0 failed" and exit 0: all 6 planted cases and all 5 bisections
+# -- 36 assertions -- vanished and the suite stayed green. "7/7 diagnosed" is
+# true today and was enforced by nothing, and an eighth case directory would
+# have been silently untested.
+#
+# The check is against the directory rather than against another literal:
+# every case dir except `control` must appear in PLANTED, and `control` is
+# used separately below.
+CASE_DIRS = sorted(d for d in os.listdir(os.path.join(HERE, "cases"))
+                   if os.path.isdir(os.path.join(HERE, "cases", d)))
+_planted_names = sorted(c[0] for c in PLANTED)
+_expect_planted = sorted(d for d in CASE_DIRS if d != "control")
+check("every case directory except control is a planted case",
+      _planted_names, _expect_planted)
+truthy("...and there are some, so the comparison is not two empty lists",
+       len(_expect_planted) >= 5)
+
 BISECT = [
     ("date-macro", "time"),
     ("file-macro", "path"),
@@ -276,8 +295,19 @@ BISECT = [
     ("ar-stamp", "time,umask"),   # ar records both the clock and the file mode
     ("ls-order", "locale"),
 ]
+# BISECT is a subset of the planted cases, chosen for having a single
+# identifiable axis. Pinned the same way: a list that shrank to nothing used
+# to take its assertions with it silently.
+truthy("every bisection case is a planted case",
+       all(c in _planted_names for c, _ in BISECT))
+check("the bisection set is the expected size", len(BISECT), 5)
+
 for case, axis in BISECT:
     if case == "ls-order" and not LOCALE_OK:
+        # Said out loud, like its twin in the PLANTED loop above. This was a
+        # bare `continue`, so on a machine with no non-C locale the
+        # bisection for ls-order disappeared with no line and no counter.
+        print("skip %s bisection (no non-C locale available)" % case)
         continue
     rc, res, err = run(["check", os.path.join(CASES, case), "--no-vary", axis,
                         "--json"])

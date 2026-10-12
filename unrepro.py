@@ -273,8 +273,39 @@ def run_build(src, dest, v, cmd, timeout):
     # dangling symlink, an over-long one, and a loop of 42 levels, because
     # refusing to follow a hostile symlink is the whole thing tarx is for.
     # Copying links as links is also the more faithful copy of a build input.
-    shutil.copytree(src, dest, symlinks=True,
-                    ignore=shutil.ignore_patterns(".git"))
+    # A file that vanishes between scandir and copy is not an error here.
+    # `check` is pointed at live build trees -- the suite aims it at a sibling
+    # repo -- and anything building in one concurrently creates and removes
+    # intermediates. copytree raises shutil.Error for that, which produced no
+    # verdict at all and read as a bug in unrepro: measured at 2 of 65 runs,
+    # 3.1%, with the vanishing file being cc/t/dt.c.cc.s from a concurrent
+    # differential run. README.md's account of the ar-stamp flake is a
+    # different flake, and that one really is fixed.
+    #
+    # Reproduced deterministically 5 times out of 5 by copying a tree while a
+    # background loop removed and recreated 3000 files in it.
+    def _skip_vanished(directory, names):
+        skip = set(shutil.ignore_patterns(".git")(directory, names))
+        for n in names:
+            if n in skip:
+                continue
+            if not os.path.lexists(os.path.join(directory, n)):
+                skip.add(n)
+        return skip
+
+    try:
+        shutil.copytree(src, dest, symlinks=True, ignore=_skip_vanished)
+    except shutil.Error as e:
+        gone = [a for a in e.args[0]
+                if isinstance(a, tuple) and len(a) == 3
+                and "No such file or directory" in str(a[2])]
+        if len(gone) != len(e.args[0]):
+            raise
+        # Every complaint was a file that disappeared under us. The copy is
+        # otherwise complete, and a build input that is being deleted while we
+        # read it was never going to be reproducible anyway.
+        print("note: %d file(s) vanished while copying %s; skipped"
+              % (len(gone), src), file=sys.stderr)
     before = snapshot(dest)
     argv = list(cmd) + (["-j%d" % v["jobs"]] if "jobs" in v else [])
     # umask has to be set in the child, after fork and before exec. preexec_fn
