@@ -31,6 +31,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import struct
 import subprocess
 import sys
@@ -284,13 +285,40 @@ def run_build(src, dest, v, cmd, timeout):
     #
     # Reproduced deterministically 5 times out of 5 by copying a tree while a
     # background loop removed and recreated 3000 files in it.
+    # Named pipes, sockets and device nodes are skipped too, and counted so
+    # the skip is reported rather than silent.
+    #
+    # shutil.copytree cannot copy them: it raises shutil.Error with "is a
+    # named pipe", which is not the vanished-file case handled below, so the
+    # traceback escaped and the tool died. Pointed at httpd -- whose suite
+    # leaves a fifo in t/tmp/root/ from the test asserting that a fifo is not
+    # a document -- `unrepro check` produced a Python stack trace instead of a
+    # verdict. Any tree with a fifo anywhere in it did.
+    #
+    # Skipping is right rather than a workaround: a build output is a regular
+    # file. A fifo in the tree is either test scaffolding or something a build
+    # reads from, and in neither case can its contents be compared between two
+    # builds.
+    special = []
+
     def _skip_vanished(directory, names):
         skip = set(shutil.ignore_patterns(".git")(directory, names))
         for n in names:
             if n in skip:
                 continue
-            if not os.path.lexists(os.path.join(directory, n)):
+            p = os.path.join(directory, n)
+            if not os.path.lexists(p):
                 skip.add(n)
+                continue
+            try:
+                st = os.lstat(p)
+            except OSError:
+                skip.add(n)
+                continue
+            if not (stat.S_ISREG(st.st_mode) or stat.S_ISDIR(st.st_mode)
+                    or stat.S_ISLNK(st.st_mode)):
+                skip.add(n)
+                special.append(p)
         return skip
 
     try:
@@ -306,6 +334,10 @@ def run_build(src, dest, v, cmd, timeout):
         # read it was never going to be reproducible anyway.
         print("note: %d file(s) vanished while copying %s; skipped"
               % (len(gone), src), file=sys.stderr)
+    if special:
+        print("note: %d non-regular file(s) skipped while copying %s "
+              "(fifo/socket/device, which cannot be a build output): %s"
+              % (len(special), src, ", ".join(special[:3])), file=sys.stderr)
     before = snapshot(dest)
     argv = list(cmd) + (["-j%d" % v["jobs"]] if "jobs" in v else [])
     # umask has to be set in the child, after fork and before exec. preexec_fn

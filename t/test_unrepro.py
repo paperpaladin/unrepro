@@ -23,6 +23,7 @@ to gcc/ar/gzip and takes a few seconds.
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -465,6 +466,41 @@ if REAL and not os.environ.get("UNREPRO_SKIP_REAL"):
                     print("         " + line)
 else:
     print("skip real sibling build (none found, or UNREPRO_SKIP_REAL set)")
+
+# ------------------------------------------------ a fifo in the source tree
+#
+# shutil.copytree cannot copy a named pipe: it raises shutil.Error with "is a
+# named pipe", which is not the vanished-file case the handler covers, so the
+# traceback escaped and `unrepro check` died instead of returning a verdict.
+#
+# This was not hypothetical. httpd's suite leaves a fifo in t/tmp/root/ from
+# the test asserting that a fifo is not a document, so pointing unrepro at
+# httpd printed a Python stack trace. Any tree with a fifo anywhere in it did.
+#
+# Skipping is the right answer rather than a workaround: a build output is a
+# regular file, and the contents of a fifo cannot be compared between two
+# builds even in principle. The skip is reported, because a silent one would
+# hide a tree that is mostly unreadable.
+with tempfile.TemporaryDirectory() as td:
+    proj = os.path.join(td, "fifoproj")
+    os.makedirs(os.path.join(proj, "sub"))
+    with open(os.path.join(proj, "main.c"), "w") as fh:
+        fh.write("int main(void){return 0;}\n")
+    with open(os.path.join(proj, "Makefile"), "w") as fh:
+        fh.write("all: prog\nprog: main.c\n\t$(CC) -O0 -o $@ $<\n")
+    os.mkfifo(os.path.join(proj, "sub", "apipe"))
+
+    rc, res, err = run(["check", proj, "--cmd", "make -B"])
+    truthy("a fifo in the tree does not crash the tool",
+           "Traceback" not in err, err[-300:])
+    check("...and a verdict is still produced", rc, 0)
+    truthy("...and the skip is reported rather than silent",
+           "non-regular file" in err, err[-300:])
+    truthy("...and it names the fifo it skipped", "apipe" in err, err[-300:])
+    # The fixture has to actually contain one, or the three above pass for the
+    # wrong reason.
+    truthy("the fixture really did contain a fifo",
+           stat.S_ISFIFO(os.lstat(os.path.join(proj, "sub", "apipe")).st_mode))
 
 print("\n%d passed, %d failed" % (passed, failed))
 sys.exit(1 if failed else 0)
