@@ -228,13 +228,33 @@ $ unrepro check /home/x/projects/cc --cmd 'make -B'
 VERDICT: NOT REPRODUCIBLE -- 1 of 1 output(s) differ: build-path
 ```
 
-`cc`, `walkv`, `rx` and `trace` are all **not reproducible**, all for the same
-reason: they build with `-g`, and DWARF's `.debug_line_str` records the directory
-the compiler ran in. `.debug_line_str` grew by exactly 35 bytes, which is exactly
-how much longer build B's directory name is. The fix for all four is
-`-ffile-prefix-map=$(CURDIR)=.` in `CFLAGS`. This is the mundane, boring,
-overwhelmingly most common reproducibility bug there is, and no amount of building
-twice in the same directory would ever have shown it.
+All four were **not reproducible**, for the same reason: they build with `-g`,
+and DWARF's `.debug_line_str` records the directory the compiler ran in.
+`.debug_line_str` grew by exactly 35 bytes, which is exactly how much longer
+build B's directory name is. This is the mundane, boring, overwhelmingly most
+common reproducibility bug there is, and no amount of building twice in the
+same directory would ever have shown it.
+
+### And then the fix, which is the half this file was missing
+
+The fix for all four is `-ffile-prefix-map=$(CURDIR)=.` in `CFLAGS`. It was
+applied, and this section stopped at the finding -- so the README went on
+claiming four siblings were irreproducible after they had been fixed, which
+understates the tool and the tree it is pointed at. Re-measured:
+
+```
+$ for r in cc walkv rx trace; do unrepro check ../$r --cmd 'make -B'; done
+  cc        ok     VERDICT: REPRODUCIBLE across all varied conditions (1 output(s))
+  walkv     ok     VERDICT: REPRODUCIBLE across all varied conditions (1 output(s))
+  rx        ok     VERDICT: REPRODUCIBLE across all varied conditions (1 output(s))
+  trace     ok     VERDICT: REPRODUCIBLE across all varied conditions (1 output(s))
+```
+
+Which is the whole arc worth having: a tool that said "reproducible" when it
+had compared nothing, then said "not reproducible" and named the byte offset
+and the flag to fix it, then said "reproducible" once the flag was there. The
+middle step is the only one that required the tool; the first and last are
+what make the middle one believable.
 
 ## Status
 
