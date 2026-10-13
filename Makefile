@@ -8,6 +8,9 @@ test:
 # it -- so this only sweeps the bytecode cache and anything --keep left behind.
 clean:
 	rm -rf __pycache__ t/__pycache__
-	rm -rf /tmp/unrepro.*
+# mkdtemp honours $TMPDIR; this did not, so on a machine with TMPDIR set
+# elsewhere the sweep looked in /tmp, found nothing, and left the real
+# directories behind while reporting success.
+	rm -rf "$${TMPDIR:-/tmp}"/unrepro.*
 
 .PHONY: test clean
