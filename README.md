@@ -299,12 +299,20 @@ Works, with the limits below stated plainly.
 
 What does not work, honestly:
 
-- Shuffled `readdir` order is not implemented. This is the biggest gap. Any
-  build that globs or walks a directory without sorting is order-dependent, and on
-  ext4 the order is stable per directory, so the bug is invisible on the machine
-  that has it and explodes on someone else's. The `ls-order` case is caught today
-  only because the *locale* changed. Right answer, wrong reason. Doing it properly needs an `LD_PRELOAD` shim over `readdir`/`readdir64`
-  that buffers each `DIR*` and reverses it. That is `PLAN.md` item 04.
+- Shuffled `readdir` order is implemented, and this paragraph said it was
+  not for two weeks after the shim landed. It was the longest-standing false
+  claim in this README: it named the gap as the biggest one here, described
+  the `LD_PRELOAD` shim as the right answer, and pointed at `PLAN.md` item 04
+  while that item was already ticked and `t/readdir_shim.c` was already in
+  the tree being preloaded. A section headed "what does not work" earns no
+  trust from being candid about the wrong things.
+
+  What is actually there: the shim wraps `readdir` and `readdir64`, buffers
+  each `DIR*` and hands the entries back reversed. Both symbols, because
+  glibc's `readdir64` is not an alias on this platform and a shim over one of
+  them leaves half the callers unaffected. The `ls-order` case is now caught
+  for the right reason rather than because the locale happened to change
+  alongside it.
 - The wall clock cannot be pinned. `SOURCE_DATE_EPOCH` is the only clock
   override available without `libfaketime` (not stdlib), and `date(1)`,
   `ar` without `U`, and anything calling `time()` ignore it. Consequence. The
