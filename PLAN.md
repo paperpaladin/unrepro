@@ -60,7 +60,7 @@ Ranked by how much each would hurt to lose.
    `ar-metadata` and name `mtime`. A tool that says "differs" without saying why
    is not useful, so detection alone is not a passing grade.
 2. The control case, and the assertion that it actually produced its four
-   outputs. A control that compiles nothing passes vacuously, which is the same
+   outputs. A control that compiles nothing passes vacuously, the same
    false negative wearing a different hat. Crying wolf is the other way to die:
    a checker that flags a correct build gets switched off, after which it catches
    nothing.
@@ -170,7 +170,7 @@ than listed one per line; `git log --oneline` has the detail.
            without sorting, is order-dependent, and on ext4 the order is stable
            per-directory, so this bug is invisible on the machine that has it
            and explodes on the buildd. `ls`-based lists are caught today only
-           because the *locale* changed, which is the wrong reason to be right.
+           because the *locale* changed, and that is the wrong reason to be right.
 - [ ] 05 pin the wall clock with an `LD_PRELOAD` shim over `time`/`gettimeofday`/
       `clock_gettime`, offsetting it by months between the two builds
       why: `date(1)`, `ar` without `U`, and anything calling `time()` ignore
@@ -225,7 +225,7 @@ than listed one per line; `git log --oneline` has the detail.
       "caused by: time"
       why: `--no-vary` already does this, by hand, one axis at a time. Every
            report in this README was produced by running it six times and
-           reading the verdicts, which is exactly the kind of loop a machine
+           reading the verdicts, exactly the kind of loop a machine
            should be doing.
 
 ## Open questions
