@@ -26,7 +26,7 @@ unrepro: /home/x/projects/unrepro/t/cases/ar-stamp
 VERDICT: NOT REPRODUCIBLE -- 1 of 3 output(s) differ: ar-metadata
 ```
 
-(Both `A` mtimes used to be a wall-clock value, which is why this paragraph
+(Both `A` mtimes used to be a wall-clock value, and that is why this paragraph
 used to quote `1791268131` while the transcript above read `1000000000`. They
 come from `SOURCE_DATE_EPOCH` now, so the numbers above are the numbers you
 will get. The reason is a flake worth reading about, see *The suite was
@@ -66,7 +66,7 @@ one machine's directory layout inside the artifact, and two builds in the same
 directory can never show you that. It is also what every sibling repository in
 this tree turned out to be guilty of, see "A real finding" below. The second
 directory name is a different *length* on purpose, so a leaked path shifts every
-later offset in the file, which is a much louder signal than a same-length
+later offset in the file, a much louder signal than a same-length
 substitution.
 
 `--no-vary AXIS[,AXIS]` holds an axis constant, which is how you attribute a
@@ -162,8 +162,8 @@ reverse: the control must come back clean, since a checker that cries wolf on a
 correct build gets switched off, after which it catches nothing.
 
 The control also has to prove it *built* something. A control that compiles
-nothing passes vacuously, which is the same false negative wearing a different
-hat, so the suite insists on all four of its outputs by name.
+nothing passes vacuously. The same false negative wears a different hat
+there, so the suite insists on all four of its outputs by name.
 
 Then the bisection matrix: `--no-vary AXIS` must make the case planted on that
 axis go clean. That is what proves the variations cause the detections rather
@@ -230,12 +230,12 @@ VERDICT: NOT REPRODUCIBLE -- 1 of 1 output(s) differ: build-path
 
 All four were **not reproducible**, for the same reason: they build with `-g`,
 and DWARF's `.debug_line_str` records the directory the compiler ran in.
-`.debug_line_str` grew by exactly 35 bytes, which is exactly how much longer
+`.debug_line_str` grew by exactly 35 bytes, exactly how much longer
 build B's directory name is. This is the mundane, boring, overwhelmingly most
 common reproducibility bug there is, and no amount of building twice in the
 same directory would ever have shown it.
 
-### And then the fix, which is the half this file was missing
+### And then the fix, the half this file was missing
 
 The fix for all four is `-ffile-prefix-map=$(CURDIR)=.` in `CFLAGS`. It was
 applied, and this section stopped at the finding, so the README went on
@@ -266,11 +266,10 @@ What does not work, honestly:
   build that globs or walks a directory without sorting is order-dependent, and on
   ext4 the order is stable per directory, so the bug is invisible on the machine
   that has it and explodes on someone else's. The `ls-order` case is caught today
-  only because the *locale* changed, which is the right answer for the wrong
-  reason. Doing it properly needs an `LD_PRELOAD` shim over `readdir`/`readdir64`
+  only because the *locale* changed. Right answer, wrong reason. Doing it properly needs an `LD_PRELOAD` shim over `readdir`/`readdir64`
   that buffers each `DIR*` and reverses it. That is `PLAN.md` item 04.
 - The wall clock cannot be pinned. `SOURCE_DATE_EPOCH` is the only clock
-  override available without `libfaketime`, which is not stdlib, and `date(1)`,
+  override available without `libfaketime` (not stdlib), and `date(1)`,
   `ar` without `U`, and anything calling `time()` ignore it. Consequence: the
   `date-cmd` case is detected only because `TZ` changed, and its `--no-vary time`
   bisection is deliberately not asserted because the answer depends on whether a
@@ -388,7 +387,7 @@ negative, in a tool whose whole job is telling people their build is not
 reproducible.
 
 `ar rcSU` suppresses the symbol index, so the only variation left is the
-member headers, which is what the case is about. The member mtimes now come
+member headers, the thing the case is about. The member mtimes now come
 from `SOURCE_DATE_EPOCH`, not from whenever the compiler ran, so the
 `time` axis controls them. 30 consecutive clean runs.
 
