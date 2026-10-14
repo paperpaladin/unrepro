@@ -253,8 +253,7 @@ $ for r in cc walkv rx trace; do unrepro check ../$r --cmd 'make -B'; done
 Which is the whole arc worth having: a tool that said "reproducible" when it
 had compared nothing, then said "not reproducible" and named the byte offset
 and the flag to fix it, then said "reproducible" once the flag was there. The
-middle step is the only one that required the tool. The first and last are
-what make the middle one believable.
+middle step is the only one that required the tool. First and last are what make the middle one believable.
 
 ## Status
 
