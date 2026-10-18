@@ -58,6 +58,44 @@ value of this tool is in what it changes between build 1 and build 2:
 | `umask` | `022` | `077` | modes recorded inside `ar` and `tar` members |
 | `host` | `builder-one` / `alice` | `buildd-42.example.org` / `bob` | build-host and build-user identity baked into artifacts |
 | `jobs` | `-j1` | `-j4` | archive member order, link order, anything racing |
+| `readdir` | real order | reversed, via `LD_PRELOAD` | globs and directory walks that never sort |
+
+### Directory order, the axis that could not be varied
+
+Any build that globs, or walks a directory without sorting, depends on
+the order `readdir` hands entries back. On ext4 that order is stable
+per-directory, so the bug is invisible on the machine that has it and
+appears on the buildd. `t/readdir_shim.c` is preloaded into build B
+and returns each directory reversed.
+
+**Reversed, not shuffled.** A random order makes a failure depend on a
+seed nobody recorded, and "is this reproducible" must not be answered
+differently on two runs of this tool.
+
+Until this existed, an `ls`-based file list was caught only because the
+locale differed between the two builds. That is the right answer for
+the wrong reason, and it would keep passing for a project that sorted
+explicitly in one place and globbed in another. `t/cases/readdir-order`
+uses `ls -U`, which does not sort at all, so no locale change can find
+it and this axis is the only thing that can.
+
+That case builds **two** manifests, one with `ls` and one with
+`python3`, because glibc exports `readdir` and `readdir64` as separate
+symbols and different programs resolve different ones. The first
+version of the shim wrapped only `readdir` and changed nothing
+whatever for Python, which is indistinguishable from a build that was
+already order-independent.
+
+A suite checking one of those outputs would pass with half the shim
+neutralised. That is measured, not assumed: neutralising each reversal
+in turn drops the differing-output count from 2 to 1 while every
+assertion stays green, so the suite checks both and each half of the
+shim is load-bearing.
+
+If the shim cannot be built the axis reports INERT, in the header and
+in the notes, exactly as the locale axis does when no non-C locale is
+installed. An axis that quietly stops varying is how this tool would
+begin to lie.
 
 Varying the build path matters as much as varying the clock. The clock class
 of bug is the famous one, but path leakage is at least as common and far harder to
